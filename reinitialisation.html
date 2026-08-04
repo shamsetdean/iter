@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<!--
+  iter — Anthropotech Lab
+  © 2026 Shams Guettaf. Tous droits réservés.
+  Reproduction, modification ou distribution interdites sans
+  autorisation écrite préalable. Voir LICENSE.txt.
+-->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Nouveau mot de passe — iter</title>
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0a0e1a">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+  .exigences { font-size: 11px; color: var(--ink-dim); line-height: 1.7; margin: 10px 0 0; padding-left: 16px; }
+  .exigences li.ok { color: var(--green); }
+</style>
+</head>
+<body>
+
+<div class="auth-card">
+  <div class="eyebrow">anthropotech /lab · iter</div>
+  <h1>Nouveau mot de passe</h1>
+  <div class="sub" id="sous-titre">Vérification du lien…</div>
+
+  <div id="formulaire" style="display:none;">
+    <div class="field">
+      <label for="mdp1">Nouveau mot de passe</label>
+      <input type="password" id="mdp1" autocomplete="new-password" placeholder="••••••••">
+    </div>
+    <div class="field">
+      <label for="mdp2">Confirmer</label>
+      <input type="password" id="mdp2" autocomplete="new-password" placeholder="••••••••">
+    </div>
+
+    <ul class="exigences" id="exigences">
+      <li id="ex-longueur">Au moins 8 caractères</li>
+      <li id="ex-identiques">Les deux saisies sont identiques</li>
+    </ul>
+
+    <button class="btn-primary" id="valider">Enregistrer</button>
+  </div>
+
+  <div class="auth-error" id="message"></div>
+
+  <a href="index.html" class="btn-link" style="display:block;text-align:center;margin-top:14px;">Retour à l'application</a>
+</div>
+
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script type="module" src="js/reinitialisation.js"></script>
+</body>
+</html>

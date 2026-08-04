@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<!--
+  iter — Anthropotech Lab
+  © 2026 Shams Guettaf. Tous droits réservés.
+  Reproduction, modification ou distribution interdites sans
+  autorisation écrite préalable. Voir LICENSE.txt.
+-->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Supervision — iter</title>
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="theme-color" content="#0a0e1a">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  body { padding: 0 16px calc(var(--safe-b) + 40px); max-width: 900px; margin: 0 auto; }
+
+  .sup-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: calc(var(--safe-t) + 14px) 0 12px;
+    background: rgba(10, 14, 26, 0.92);
+    backdrop-filter: blur(12px);
+  }
+  .sup-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .sup-header h1 { font-size: 20px; margin: 0; }
+  .sup-header .sub { font-size: 11px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.1em; }
+  .sup-actions { display: flex; gap: 8px; }
+  .sup-actions a, .sup-actions button {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 13px; border-radius: 20px;
+    font-size: 12px; font-weight: 600; text-decoration: none;
+    border: 1px solid var(--border-strong);
+    background: rgba(255,255,255,0.04); color: var(--ink);
+  }
+  .sup-actions svg { width: 14px; height: 14px; }
+
+  .filtres { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .filtres button {
+    padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    border: 1px solid var(--border); color: var(--ink-dim); background: rgba(255,255,255,0.02);
+  }
+  .filtres button.active { color: var(--ink); border-color: var(--border-strong); background: rgba(63,182,245,0.12); }
+  .filtres .separateur { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+
+  /* Bandeau de synthèse */
+  .synthese { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin: 16px 0; }
+  .synthese-carte {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px; text-align: center;
+  }
+  .synthese-val {
+    font-size: 19px; font-weight: 700;
+    background: var(--gradient); -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .synthese-label { font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+
+  #carte-sup { height: 320px; border-radius: 14px; overflow: hidden; margin-bottom: 18px; border: 1px solid var(--border); }
+
+  .parcours-ligne {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 13px 15px; margin-bottom: 9px;
+  }
+  .pl-haut { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+  .pl-titre { font-size: 14px; font-weight: 600; }
+  .pl-meta { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+  .pl-auteur {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 2px 8px; border-radius: 20px; margin-right: 6px;
+    background: rgba(63,182,245,0.15); color: var(--blue);
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .pl-badges { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+  .pl-type { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; padding: 3px 8px; border-radius: 20px; font-weight: 700; }
+  .pl-type.pied { color: var(--green); background: rgba(61,220,151,0.12); }
+  .pl-type.voiture { color: var(--blue); background: rgba(63,182,245,0.12); }
+  .pl-suppr {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-dim); background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  }
+  .pl-suppr:hover { color: var(--danger); border-color: var(--danger); }
+  .pl-suppr svg { width: 14px; height: 14px; }
+
+  .pl-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(62px, 1fr)); gap: 8px; }
+  .pl-val { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .pl-lab { font-size: 9px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 1px; }
+
+  /* Comptes et droits */
+  .bt-action {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 13px; border-radius: 20px;
+    font-size: 12px; font-weight: 600;
+    border: 1px solid var(--border-strong);
+    background: rgba(255,255,255,0.04); color: var(--ink);
+  }
+  .bt-action svg { width: 14px; height: 14px; }
+
+  .compte-carte {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 15px 17px; margin-bottom: 11px;
+  }
+  .cc-entete { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .cc-identite .cc-nom { font-size: 15px; font-weight: 700; }
+  .cc-identite .cc-mail { font-size: 11px; color: var(--ink-dim); margin-top: 1px; }
+  .cc-badge-admin {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 3px 9px; border-radius: 20px;
+    background: rgba(61,220,151,0.14); color: var(--green);
+  }
+
+  .cc-domaine { margin-bottom: 12px; }
+  .cc-domaine-titre {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--ink-dim); font-weight: 700; margin-bottom: 7px;
+  }
+  .cc-droits { display: flex; flex-wrap: wrap; gap: 7px; }
+  .cc-droit {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 12px; border-radius: 20px;
+    font-size: 12px; font-weight: 600;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.02); color: var(--ink-dim);
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+  .cc-droit .puce {
+    width: 14px; height: 14px; border-radius: 4px;
+    border: 1px solid var(--border-strong);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .cc-droit .puce svg { width: 10px; height: 10px; opacity: 0; }
+  .cc-droit.actif { color: #06121a; background: var(--green); border-color: var(--green); }
+  .cc-droit.actif .puce { background: rgba(0,0,0,0.18); border-color: transparent; }
+  .cc-droit.actif .puce svg { opacity: 1; }
+  .cc-droit:disabled { opacity: 0.45; }
+
+  .cc-reglages { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .cc-reglages label { font-size: 11px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+  .cc-reglages select, .cc-reglages input {
+    padding: 7px 10px; border-radius: 8px; font-size: 12px;
+    border: 1px solid var(--border); background: var(--bg-elevated); color: var(--ink);
+  }
+  .cc-reglages input { width: 82px; }
+  .cc-retour { font-size: 11px; margin-left: auto; min-height: 15px; }
+  .cc-retour.succes { color: var(--green); }
+  .cc-retour.erreur { color: var(--danger); }
+
+  .etat { text-align: center; padding: 50px 20px; color: var(--ink-dim); font-size: 14px; line-height: 1.6; }
+
+  /* Journal d'activité */
+  #liste-journal { max-height: 340px; overflow-y: auto; }
+  .jr-ligne {
+    display: flex; align-items: center; gap: 11px;
+    padding: 9px 13px; margin-bottom: 6px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    font-size: 12px;
+  }
+  .jr-pastille {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .jr-ligne.creation    .jr-pastille { background: var(--blue); }
+  .jr-ligne.traitement  .jr-pastille { background: var(--green); }
+  .jr-ligne.modification .jr-pastille { background: #f5a623; }
+  .jr-ligne.suppression .jr-pastille { background: var(--danger); }
+  .jr-qui { font-weight: 700; color: var(--ink); }
+  .jr-quoi { color: var(--ink-dim); flex: 1; min-width: 0; }
+  .jr-quand { color: var(--ink-dim); font-size: 11px; white-space: nowrap; }
+  .jr-detail { display: block; color: var(--ink-dim); font-size: 11px; margin-top: 2px; }
+  .jr-voir {
+    display: inline-block; margin-top: 5px;
+    font-size: 11px; font-weight: 600;
+    padding: 3px 9px; border-radius: 20px;
+    background: rgba(239,83,80,0.12); border: 1px solid rgba(239,83,80,0.35);
+    color: var(--danger);
+  }
+
+  .bloc-titre {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; flex-wrap: wrap; margin: 26px 0 12px;
+  }
+  .bloc-titre h2 { font-size: 16px; margin: 0; }
+
+  .sig-ligne {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 11px 14px; margin-bottom: 8px;
+  }
+  .sig-ligne.traite { opacity: 0.5; }
+  .sig-rond {
+    width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; color: #0a0e1a;
+  }
+  .sig-infos { flex: 1; min-width: 0; }
+  .sig-type { font-size: 13px; font-weight: 700; }
+  .sig-meta { font-size: 11px; color: var(--ink-dim); margin-top: 2px; }
+  .sig-note { font-size: 12px; color: var(--ink); margin-top: 3px; font-style: italic; }
+  .sig-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .sig-actions button {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: var(--ink-dim);
+  }
+  .sig-actions button svg { width: 15px; height: 15px; }
+  .sig-actions .valider:hover { color: var(--green); border-color: var(--green); }
+  .sig-actions .rouvrir:hover { color: var(--blue); border-color: var(--blue); }
+  .sig-actions .suppr:hover { color: var(--danger); border-color: var(--danger); }
+  .refus { max-width: 420px; margin: 60px auto; text-align: center; }
+  .refus h2 { color: var(--danger); font-size: 19px; }
+  .refus p { color: var(--ink-dim); font-size: 13px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<!-- Écran d'authentification (réutilise les styles de l'app) -->
+<div id="auth-screen" style="display:none;">
+  <div class="auth-card">
+    <div class="eyebrow">anthropotech /lab · iter</div>
+    <h1 id="auth-title">Supervision</h1>
+    <div class="sub">Espace réservé — connexion requise</div>
+
+    <div class="field">
+      <label for="auth-email">Email</label>
+      <input type="email" id="auth-email" autocomplete="email" placeholder="toi@exemple.fr">
+    </div>
+    <div class="field">
+      <label for="auth-password">Mot de passe</label>
+      <input type="password" id="auth-password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+
+    <button class="btn-primary" id="auth-submit">Se connecter</button>
+    <button class="btn-link" id="auth-oubli">Mot de passe oublié ?</button>
+    <div class="auth-error" id="auth-error"></div>
+  </div>
+</div>
+
+<!-- Accès refusé : compte valide mais sans droit de supervision -->
+<div id="ecran-refus" style="display:none;">
+  <div class="refus">
+    <h2>Accès non autorisé</h2>
+    <p>Ce compte ne dispose pas du droit de supervision. Si vous pensez qu'il s'agit d'une erreur, contactez l'administrateur de l'application.</p>
+    <button class="btn-primary" id="btn-deconnexion-refus" style="max-width:220px;margin:18px auto 0;">Se déconnecter</button>
+  </div>
+</div>
+
+<!-- Contenu principal -->
+<div id="contenu" style="display:none;">
+  <div class="sup-topbar">
+    <div class="sup-header">
+      <div>
+        <div class="sub">anthropotech /lab · iter</div>
+        <h1>Supervision</h1>
+      </div>
+      <div class="sup-actions">
+        <a href="index.html" title="Retour à l'application">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Application
+        </a>
+        <button id="btn-export-tout" title="Exporter toutes les données en CSV">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+          CSV
+        </button>
+        <button id="btn-deconnexion" title="Se déconnecter">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 17l5-5-5-5M21 12H9M12 3H5a2 2 0 00-2 2v14a2 2 0 002 2h7"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="filtres" id="filtres">
+      <button class="f-personne active" data-user="tous">Toutes les personnes</button>
+      <div class="separateur"></div>
+      <button class="f-type active" data-type="tous">Tous</button>
+      <button class="f-type" data-type="pied">À pied</button>
+      <button class="f-type" data-type="voiture">Voiture</button>
+    </div>
+  </div>
+
+  <div class="synthese" id="synthese"></div>
+
+  <div class="bloc-titre">
+    <h2>Signalements</h2>
+    <div class="filtres" id="filtres-signalements">
+      <button class="f-sig active" data-statut="ouvert">Ouverts</button>
+      <button class="f-sig" data-statut="tous">Tous</button>
+      <button class="f-sig" data-statut="traite">Traités</button>
+    </div>
+  </div>
+  <div id="liste-signalements" class="etat">Chargement…</div>
+
+  <div class="bloc-titre">
+    <h2>Comptes et droits</h2>
+    <button id="btn-ajouter-compte" class="bt-action">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      Autoriser une adresse
+    </button>
+  </div>
+  <div id="liste-comptes" class="etat">Chargement…</div>
+
+  <div class="bloc-titre">
+    <h2>Journal d'activité</h2>
+    <div class="filtres" id="filtres-journal">
+      <button class="f-journal active" data-action="tous">Tout</button>
+      <button class="f-journal" data-action="creation">Créations</button>
+      <button class="f-journal" data-action="traitement">Traitements</button>
+      <button class="f-journal" data-action="modification">Modifications</button>
+      <button class="f-journal" data-action="suppression">Suppressions</button>
+      <button id="btn-export-journal" class="bt-action">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+        Exporter
+      </button>
+    </div>
+  </div>
+  <div id="liste-journal" class="etat">Chargement…</div>
+
+  <div class="bloc-titre"><h2>Parcours</h2></div>
+  <div id="carte-sup"></div>
+  <div id="liste-parcours" class="etat">Chargement…</div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script type="module" src="js/supervision.js"></script>
+</body>
+</html>

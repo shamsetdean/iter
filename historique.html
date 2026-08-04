@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<!--
+  iter — Anthropotech Lab
+  © 2026 Shams Guettaf. Tous droits réservés.
+  Reproduction, modification ou distribution interdites sans
+  autorisation écrite préalable. Voir LICENSE.txt.
+-->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Historique — iter</title>
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<meta name="theme-color" content="#0a0e1a">
+<link rel="stylesheet" href="css/style.css">
+<style>
+  body { padding: 0 16px calc(var(--safe-b) + 40px); max-width: 720px; margin: 0 auto; }
+
+  /* Barre du haut flottante : la carte étant en plein écran
+     (position: fixed), sans ça le retour et les filtres seraient
+     recouverts et l'utilisateur ne pourrait plus en sortir. */
+  .hist-topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 20;
+    padding: calc(var(--safe-t) + 12px) 16px 10px;
+    background: rgba(10, 14, 26, 0.94);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .hist-topbar-inner { max-width: 720px; margin: 0 auto; }
+
+  .hist-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .hist-header h1 { font-size: 19px; margin: 0; }
+  .back-link {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; color: var(--ink); text-decoration: none;
+    padding: 7px 12px; border-radius: 20px;
+    border: 1px solid var(--border-strong); background: rgba(255,255,255,0.05);
+    font-weight: 600;
+  }
+  .back-link svg { width: 14px; height: 14px; }
+
+  /* Espace sous la barre fixe pour que la liste ne passe pas dessous */
+  #liste { padding-top: 132px; }
+
+  .filters { display: flex; gap: 8px; margin-bottom: 0; align-items: center; }
+  .filters button {
+    padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    border: 1px solid var(--border); color: var(--ink-dim); background: rgba(255,255,255,0.02);
+  }
+  .filters button.active { color: var(--ink); border-color: var(--border-strong); }
+  .filters .spacer { flex: 1; }
+  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .view-toggle button { border-radius: 0; border: none; }
+  .view-toggle button.active { background: var(--gradient); color: #06121a; }
+
+  #map-historique {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    display: none;
+  }
+  #map-historique.visible { display: block; }
+
+  #detail-panel {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 10;
+    max-height: 60vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-radius: 18px 18px 0 0;
+    padding: 18px 18px calc(var(--safe-b) + 18px);
+    display: none;
+    box-shadow: 0 -10px 30px rgba(0,0,0,0.4);
+  }
+  #detail-panel.visible { display: block; }
+  #detail-panel.plein-ecran { max-height: 84px; overflow: hidden; }
+  #detail-panel.plein-ecran .dp-stats,
+  #detail-panel.plein-ecran .dp-evenements,
+  #detail-panel.plein-ecran .export-row { display: none; }
+  .dp-fullscreen-btn {
+    width: 100%;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px; margin-bottom: 12px;
+    border-radius: 10px; border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03); color: var(--ink-dim);
+    font-size: 12px; font-weight: 600;
+  }
+  .dp-fullscreen-btn svg { width: 15px; height: 15px; }
+
+  .dp-nav {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin-bottom: 12px;
+  }
+  .dp-nav button {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border); background: rgba(255,255,255,0.03);
+    color: var(--ink);
+  }
+  .dp-nav button:disabled { opacity: 0.3; }
+  .dp-nav button svg { width: 16px; height: 16px; }
+  #dp-position { font-size: 11px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  #carte-compteur {
+    position: fixed;
+    left: 50%; transform: translateX(-50%);
+    top: calc(var(--safe-t) + 128px);
+    z-index: 12;
+    padding: 6px 14px; border-radius: 20px;
+    background: rgba(10, 14, 26, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    font-size: 11px; color: var(--ink-dim);
+    letter-spacing: 0.04em;
+    display: none;
+    pointer-events: none;
+  }
+  #carte-compteur.visible { display: block; }
+  #detail-panel .dp-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  #detail-panel .dp-close {
+    width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    color: var(--ink-dim); background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  }
+  #detail-panel .dp-close svg { width: 14px; height: 14px; }
+  .dp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .dp-stat-val { font-size: 15px; font-weight: 700; color: var(--ink); }
+  .dp-stat-label { font-size: 10px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  .dp-evenements { display: flex; flex-direction: column; gap: 6px; }
+  .dp-evenement {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; text-align: left;
+    font-size: 12px; color: var(--ink-dim);
+    padding: 9px 10px; border-radius: 8px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .dp-evenement:hover { border-color: var(--border-strong); color: var(--ink); }
+  .dp-evenement .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dp-evenement.arret .dot { background: #f5a623; }
+  .dp-evenement.ralentissement .dot { background: #ef5350; }
+  .dp-evenement.acceleration .dot { background: var(--green); }
+  .dp-info { font-size: 12px; color: var(--ink-dim); line-height: 1.5; }
+
+  .marqueur-evenement {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    border: 2px solid #0a0e1a;
+    box-shadow: 0 0 6px rgba(0,0,0,0.5);
+    cursor: pointer;
+  }
+  .maplibregl-popup-content {
+    background: #11172a;
+    color: #f3f5f8;
+    border: 1px solid rgba(243,245,248,0.18);
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: -apple-system, system-ui, sans-serif;
+    padding: 8px 10px;
+  }
+  .maplibregl-popup-tip { border-top-color: #11172a; border-bottom-color: #11172a; }
+
+  .parcours-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    position: relative;
+    z-index: 2;
+    touch-action: pan-y;
+    cursor: grab;
+  }
+
+  .swipe-wrapper {
+    position: relative;
+    overflow: hidden;
+    border-radius: 14px;
+    margin-bottom: 10px;
+    max-height: 300px;
+    transition: max-height 0.25s ease, opacity 0.25s ease, margin 0.25s ease;
+  }
+  .swipe-action {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 110px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  .swipe-action svg { width: 20px; height: 20px; }
+  .swipe-action.share {
+    left: 0;
+    background: var(--gradient);
+    color: #06121a;
+  }
+  .swipe-action.delete {
+    right: 0;
+    background: var(--danger);
+    color: #fff;
+  }
+  /* Retour visuel pendant le geste : ces classes étaient
+     manipulées en JS sans style associé (audit). */
+  .swipe-wrapper .swipe-action { opacity: 0; transition: opacity 0.15s ease; }
+  .swipe-wrapper.revealing-share .swipe-action.share { opacity: 1; }
+  .swipe-wrapper.revealing-delete .swipe-action.delete { opacity: 1; }
+  .pc-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .pc-titre { font-size: 14px; font-weight: 600; }
+  .pc-date { font-size: 11px; color: var(--ink-dim); }
+  .pc-type {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 3px 8px; border-radius: 20px; font-weight: 700;
+  }
+  .pc-type.pied { color: var(--green); background: rgba(61,220,151,0.12); }
+  .pc-type.voiture { color: var(--blue); background: rgba(63,182,245,0.12); }
+
+  .pc-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(58px, 1fr)); gap: 8px; }
+  .pc-stat-val { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .pc-stat-label { font-size: 9px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 1px; }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--ink-dim); font-size: 14px; }
+  .loading { text-align: center; padding: 40px; color: var(--ink-dim); font-size: 13px; }
+</style>
+</head>
+<body>
+  <div class="hist-topbar">
+    <div class="hist-topbar-inner">
+      <div class="hist-header">
+        <h1>Historique</h1>
+        <a class="back-link" href="index.html">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Retour à iter
+        </a>
+      </div>
+
+      <div class="filters">
+        <button class="filter-btn active" data-type="tous">Tous</button>
+        <button class="filter-btn" data-type="pied">À pied</button>
+        <button class="filter-btn" data-type="voiture">Voiture</button>
+        <div class="spacer"></div>
+        <div class="view-toggle">
+          <button id="btn-vue-liste" class="active">Liste</button>
+          <button id="btn-vue-carte">Carte</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="liste" class="loading">Chargement…</div>
+  <div id="map-historique"></div>
+  <div id="carte-compteur"></div>
+
+  <div id="zoom-controls">
+    <button id="btn-zoom-in" title="Zoomer" aria-label="Zoomer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button id="btn-zoom-out" title="Dézoomer" aria-label="Dézoomer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg>
+    </button>
+  </div>
+
+  <div id="detail-panel">
+    <div class="dp-header">
+      <div>
+        <div class="pc-titre" id="dp-titre">—</div>
+        <div class="pc-date" id="dp-date">—</div>
+      </div>
+      <button class="dp-close" id="dp-close" aria-label="Fermer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="dp-nav">
+      <button id="dp-prec" aria-label="Parcours précédent">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
+      <span id="dp-position">—</span>
+      <button id="dp-suiv" aria-label="Parcours suivant">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+    </div>
+    <button id="dp-fullscreen" class="dp-fullscreen-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+      Naviguer dans la carte
+    </button>
+    <div class="dp-stats" id="dp-stats"></div>
+    <div class="dp-evenements" id="dp-evenements"></div>
+    <div class="export-row" style="margin-top:14px;">
+      <span class="export-label">Ce parcours :</span>
+      <button id="dp-export-gpx">GPX</button>
+      <button id="dp-export-csv">CSV</button>
+      <button id="dp-partager">Partager</button>
+    </div>
+  </div>
+
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script type="module" src="js/historique.js"></script>
+</body>
+</html>

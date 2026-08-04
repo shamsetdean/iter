@@ -1,0 +1,15 @@
+# Système
+.DS_Store
+Thumbs.db
+
+# Éditeurs
+.vscode/
+.idea/
+
+# Dépendances (si un jour un bundler est ajouté)
+node_modules/
+
+# Fichiers locaux / temporaires
+*.log
+.env
+.env.local

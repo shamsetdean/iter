@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<!--
+  iter — Anthropotech Lab
+  © 2026 Shams Guettaf. Tous droits réservés.
+  Reproduction, modification ou distribution interdites sans
+  autorisation écrite préalable. Voir LICENSE.txt.
+-->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>iter — Anthropotech Lab</title>
+<meta name="description" content="Enregistrez, analysez et optimisez vos parcours à pied ou en voiture.">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="iter — Every journey. Total insight.">
+<meta property="og:description" content="Enregistrez, analysez et optimisez vos parcours à pied ou en voiture. Distance, dénivelé, vitesse, coût, comparaison d'itinéraires.">
+<meta property="og:image" content="https://iter-alpha.vercel.app/og-image.jpg">
+<meta property="og:url" content="https://iter-alpha.vercel.app/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="iter — Every journey. Total insight.">
+<meta name="twitter:description" content="Enregistrez, analysez et optimisez vos parcours à pied ou en voiture.">
+<meta name="twitter:image" content="https://iter-alpha.vercel.app/og-image.jpg">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0e1a">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ============================================================
+     SPLASH — signature : le tracé qui se dessine
+     ============================================================ -->
+<div id="splash">
+  <svg viewBox="0 0 140 90" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="route-gradient" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="#3fb6f5" />
+        <stop offset="100%" stop-color="#3ddc97" />
+      </linearGradient>
+    </defs>
+    <path class="route" d="M10,70 C30,70 25,20 50,20 C75,20 60,60 85,60 C105,60 100,25 130,25" />
+  </svg>
+  <div class="wordmark">iter</div>
+  <div class="citation">bâtir par soi-même ce qu'on rêve de voir exister</div>
+</div>
+
+<!-- ============================================================
+     TOPBAR — Anthropotech Lab / iter
+     ============================================================ -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <img src="icons/icon-192.png" alt="">
+    <span class="brand-texte">anthropotech /lab</span>
+    <span class="divider">·</span>
+    <span>iter</span>
+  </div>
+  <div class="topbar-social">
+    <button id="btn-import" title="Importer un parcours (GPX/CSV)" aria-label="Importer un parcours">
+      <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <input type="file" id="import-input" accept=".gpx,.csv" style="display:none;">
+    <a href="historique.html" class="topbar-btn" title="Historique" aria-label="Historique">
+      <svg viewBox="0 0 24 24"><path d="M3 3v5h5M3.05 13a9 9 0 1 0 2.13-6.36L3 8" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 7v5l4 2" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+    <a href="supervision.html" class="topbar-btn" id="lien-supervision" title="Supervision" aria-label="Supervision" style="display:none;">
+      <svg viewBox="0 0 24 24"><path d="M3 3v18h18" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="m7 15 4-4 3 3 5-6" fill="none" stroke="#3ddc97" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </a>
+    <button id="btn-profil" title="Mon profil" aria-label="Mon profil">
+      <span id="profil-pastille"></span>
+    </button>
+    <button id="btn-aide" title="Revoir l'aide" aria-label="Revoir l'aide">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="#f3f5f8" stroke-width="1.6"/><path d="M9.5 9a2.5 2.5 0 0 1 4.9.8c0 1.7-2.4 2-2.4 3.2" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="17" r="1" fill="#f3f5f8"/></svg>
+    </button>
+    <button id="btn-modes-plan" title="Modes Plan" aria-label="Modes Plan">
+      <svg viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button id="btn-logout" title="Se déconnecter" aria-label="Se déconnecter">
+      <svg viewBox="0 0 24 24"><path d="M16 17l5-5-5-5M21 12H9M12 3H5a2 2 0 00-2 2v14a2 2 0 002 2h7" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ============================================================
+     AUTH SCREEN
+     ============================================================ -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <h1 id="auth-title">Connexion</h1>
+    <div class="sub">iter — tracer, analyser, optimiser vos trajets</div>
+
+    <div class="field">
+      <label for="auth-email">Email</label>
+      <input type="email" id="auth-email" autocomplete="email" placeholder="toi@exemple.fr">
+    </div>
+    <div class="field">
+      <label for="auth-password">Mot de passe</label>
+      <input type="password" id="auth-password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+
+    <button class="btn-primary" id="auth-submit">Se connecter</button>
+    <button class="btn-link" id="auth-toggle">Pas de compte ? S'inscrire</button>
+    <button class="btn-link" id="auth-oubli">Mot de passe oublié ?</button>
+    <div class="auth-error" id="auth-error"></div>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);text-align:center;">
+      <a href="mentions-legales.html" style="font-size:11px;color:var(--ink-dim);text-decoration:underline;">Mentions légales</a>
+      <div style="font-size:10px;color:var(--ink-dim);opacity:0.7;margin-top:6px;">© 2026 Shams Guettaf — Anthropotech Lab. Tous droits réservés.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     ONBOARDING — affiché une fois après la connexion
+     ============================================================ -->
+<div id="onboarding-screen" style="display:none;">
+  <div class="onboarding-card">
+    <div class="eyebrow">anthropotech /lab · iter</div>
+    <h1>Comment ça marche</h1>
+    <p class="onboarding-intro">Enregistre, analyse et optimise tes trajets à pied ou en voiture. Voici à quoi sert chaque icône.</p>
+
+    <div class="onboarding-list">
+      <div class="onboarding-item">
+        <div class="oi-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/></svg>
+        </div>
+        <div>
+          <div class="oi-titre">À pied / Voiture</div>
+          <div class="oi-desc">Choisis le type de trajet avant de démarrer — ça change les stats calculées (dénivelé, virages, coût carburant).</div>
+        </div>
+      </div>
+
+      <div class="onboarding-item">
+        <div class="oi-icon">
+          <div class="rec-dot" style="width:18px;height:18px;"></div>
+        </div>
+        <div>
+          <div class="oi-titre">Enregistrer</div>
+          <div class="oi-desc">Le gros bouton rond démarre le suivi GPS en direct. Pause et arrêt apparaissent une fois lancé.</div>
+        </div>
+      </div>
+
+      <div class="onboarding-item">
+        <div class="oi-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/></svg>
+        </div>
+        <div>
+          <div class="oi-titre">Distance, durée, vitesse</div>
+          <div class="oi-desc">Mises à jour en direct pendant l'enregistrement, avec vitesse de pointe et dénivelé dans le résumé final.</div>
+        </div>
+      </div>
+
+      <div class="onboarding-item">
+        <div class="oi-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        </div>
+        <div>
+          <div class="oi-titre">Recentrage</div>
+          <div class="oi-desc">Apparaît quand tu bouges la carte toi-même. Appuie dessus pour reprendre le suivi automatique façon GPS.</div>
+        </div>
+      </div>
+
+      <div class="onboarding-item">
+        <div class="oi-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+        </div>
+        <div>
+          <div class="oi-titre">Importer</div>
+          <div class="oi-desc">Affiche sur la carte un parcours au format GPX ou CSV, même enregistré ailleurs.</div>
+        </div>
+      </div>
+
+      <div class="onboarding-item">
+        <div class="oi-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5M3.05 13a9 9 0 1 0 2.13-6.36L3 8"/><path d="M12 7v5l4 2"/></svg>
+        </div>
+        <div>
+          <div class="oi-titre">Historique</div>
+          <div class="oi-desc">Tous tes parcours passés. Glisse une fiche vers la gauche pour la supprimer, vers la droite pour la partager.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="onboarding-strengths">
+      <div class="eyebrow" style="margin-bottom:8px;">Points forts</div>
+      <div class="strength-line">Comparaison automatique avec tes trajets précédents sur le même itinéraire — sais si tu as pris le meilleur chemin</div>
+      <div class="strength-line">Export GPX/CSV et partage visuel (tracé + stats) en un geste</div>
+      <div class="strength-line">Coût carburant réel et température au moment du trajet</div>
+      <div class="strength-line">Zéro tracker, données hébergées chez toi, conforme RGPD</div>
+    </div>
+
+    <button class="btn-primary" id="onboarding-close">J'ai compris</button>
+  </div>
+</div>
+
+<div id="boutons-flottants">
+  <button id="btn-girophare" title="Enregistrer un parcours" aria-label="Enregistrer un parcours">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 18v-6a5 5 0 1 1 10 0v6"/>
+      <path d="M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z"/>
+      <path d="M21 12h1M18.5 4.5 18 5M2 12h1M12 2v1M4.93 4.93l.7.7M12 12v6"/>
+    </svg>
+  </button>
+
+  <button id="btn-signaler" title="Signaler" aria-label="Signaler">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0ZM12 9v4M12 17h.01"/></svg>
+  </button>
+</div>
+
+<div id="feuille-profil" role="dialog" aria-label="Mon profil">
+  <div class="fs-contenu">
+    <div class="fs-header">
+      <h2>Mon profil</h2>
+      <button id="fp-close" aria-label="Fermer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="fp-apercu">
+      <div id="fp-pastille"></div>
+      <div class="fp-actions">
+        <input type="file" id="fp-photo" accept="image/*" capture="user" style="display:none;">
+        <button id="fp-photo-btn" class="bt-clair">Choisir une photo</button>
+        <button id="fp-photo-retirer" class="bt-clair danger" style="display:none;">Retirer</button>
+      </div>
+    </div>
+
+    <div class="fs-commentaire">
+      <label for="fp-nom">Nom affiché</label>
+      <input type="text" id="fp-nom" maxlength="60" placeholder="Prénom Nom">
+    </div>
+
+    <button class="btn-primary" id="fp-enregistrer">Enregistrer</button>
+    <p class="fs-retour" id="fp-retour"></p>
+    <p class="mp-note">Votre photo apparaît sur la carte à votre position, et à côté de vos signalements. Seules les personnes de l'équipe peuvent la voir.</p>
+  </div>
+</div>
+
+<div id="feuille-signalement" role="dialog" aria-label="Signaler">
+  <div class="fs-contenu">
+    <div class="fs-header">
+      <h2>Signaler</h2>
+      <button id="fs-close" aria-label="Fermer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <p class="fs-position" id="fs-position">Position en cours d'acquisition…</p>
+    <div class="fs-types" id="fs-types"></div>
+    <div class="fs-commentaire">
+      <label for="fs-note">Précision (facultatif)</label>
+      <input type="text" id="fs-note" maxlength="200" placeholder="Ex. : branche basse sur le trottoir">
+    </div>
+
+    <div class="fs-photo-zone">
+      <input type="file" id="fs-photo" accept="image/*" capture="environment" style="display:none;">
+      <button id="fs-photo-btn" class="fs-photo-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        <span id="fs-photo-libelle">Ajouter une photo</span>
+      </button>
+      <div id="fs-photo-apercu" class="fs-photo-apercu"></div>
+    </div>
+
+    <p class="fs-retour" id="fs-retour"></p>
+  </div>
+</div>
+
+<!-- ============================================================
+     CARTE
+     ============================================================ -->
+<div id="map"></div>
+
+<button id="btn-recenter" title="Recentrer sur ma position" aria-label="Recentrer sur ma position">
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="#3fb6f5" stroke-width="1.8"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="#3fb6f5" stroke-width="1.8" stroke-linecap="round"/></svg>
+</button>
+
+<div id="zoom-controls">
+  <button id="btn-zoom-in" title="Zoomer" aria-label="Zoomer">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+  <button id="btn-zoom-out" title="Dézoomer" aria-label="Dézoomer">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14"/></svg>
+  </button>
+</div>
+
+<div id="modes-plan" role="dialog" aria-label="Modes Plan">
+  <div class="mp-sheet">
+    <div class="mp-header">
+      <h2>Modes Plan</h2>
+      <button id="mp-close" aria-label="Fermer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="mp-options">
+      <button class="mp-option" data-style="standard">
+        <span class="mp-vignette mp-standard"></span>
+        <span class="mp-label">Standard</span>
+      </button>
+      <button class="mp-option" data-style="plan-ign">
+        <span class="mp-vignette mp-plan"></span>
+        <span class="mp-label">Plan IGN</span>
+      </button>
+      <button class="mp-option" data-style="satellite">
+        <span class="mp-vignette mp-satellite"></span>
+        <span class="mp-label">Satellite</span>
+      </button>
+    </div>
+    <p class="mp-note">Plan IGN et Satellite sont fournis par l'IGN — Géoplateforme, et ne couvrent que le territoire français.</p>
+    <p class="mp-erreur" id="mp-erreur" style="display:none;"></p>
+  </div>
+</div>
+
+<!-- ============================================================
+     CONTRÔLES D'ENREGISTREMENT
+     ============================================================ -->
+<div id="controls">
+  <div class="type-row">
+    <button class="type-choice active" data-type="pied" title="À pied" aria-label="À pied">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/>
+        <path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/>
+        <path d="M16 17h4"/>
+        <path d="M4 13h4"/>
+      </svg>
+    </button>
+    <button class="type-choice" data-type="voiture" title="Voiture" aria-label="Voiture">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2"/>
+        <circle cx="6.5" cy="16.5" r="2.5"/>
+        <circle cx="16.5" cy="16.5" r="2.5"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-badge">
+      <div class="stat-circle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/></svg>
+      </div>
+      <div class="stat-val" id="stat-distance">0 m</div>
+    </div>
+    <div class="stat-badge">
+      <div class="stat-circle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </div>
+      <div class="stat-val" id="stat-duree">00:00</div>
+    </div>
+    <div class="stat-badge">
+      <div class="stat-circle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>
+      </div>
+      <div class="stat-val" id="stat-vitesse">0 km/h</div>
+    </div>
+  </div>
+
+  <div class="record-row">
+    <button class="btn-circle btn-pause" id="btn-pause" style="display:none;" title="Pause" aria-label="Pause">
+      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+    </button>
+    <button class="btn-circle btn-record-main" id="btn-start" title="Démarrer l'enregistrement" aria-label="Démarrer l'enregistrement">
+      <span class="rec-dot"></span>
+    </button>
+    <button class="btn-circle btn-stop" id="btn-stop" style="display:none;" title="Arrêter" aria-label="Arrêter">
+      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+    </button>
+  </div>
+
+  <div id="summary-panel" style="display:none;">
+    <div class="summary-header">
+      <span class="eyebrow">Résumé du parcours</span>
+      <button id="summary-close" title="Fermer" aria-label="Fermer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="summary-grid" id="summary-grid"></div>
+    <div class="comparaison-box" id="summary-comparaison" style="display:none;"></div>
+    <div class="export-row">
+      <span class="export-label">Parcours enregistré :</span>
+      <button id="export-gpx">GPX</button>
+      <button id="export-csv">CSV</button>
+      <button id="share-sms">SMS</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     ALERTE SÉCURITÉ CONDUCTEUR — rouge réservé à l'urgence
+     ============================================================ -->
+<div id="driver-alert">
+  <h2>Es-tu bien passager ?</h2>
+  <p>La vitesse détectée correspond à un déplacement en voiture. Par sécurité, cette application ne doit jamais être utilisée par le conducteur.</p>
+  <div class="choices">
+    <button id="alert-confirm-passager">Je suis passager</button>
+    <button class="secondary" id="alert-stop-recording">Arrêter l'enregistrement</button>
+  </div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script type="module" src="js/main.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW non enregistré:', e));
+  });
+}
+</script>
+</body>
+</html>
