@@ -378,6 +378,12 @@ function startApp() {
     afficherSignalementsExistants();
   });
 
+  // Un fond de carte peut devenir indisponible : serveur en panne,
+  // couche retirée, zone non couverte. Le repli n'existait que lors
+  // d'un changement de fond ; au chargement, la carte restait vide
+  // sans explication si le fond enregistré ne répondait plus.
+  surveillerFondDeCarte(stylePref);
+
   marquerStyleActif(stylePref);
 
   // L'utilisateur bouge la carte lui-même -> on coupe le suivi
@@ -449,6 +455,40 @@ function reinjecterCouches() {
   }
 }
 
+// Surveille les échecs de chargement de tuiles. Au-delà de
+// quelques échecs, on bascule sur le fond standard : mieux vaut
+// une carte lisible dans un autre style qu'un écran vide.
+function surveillerFondDeCarte(styleKey, delaiMs = 12000) {
+  if (!map || styleKey === 'standard') return;
+
+  let echecs = 0;
+  const SEUIL = 4;
+
+  const surErreur = (e) => {
+    const msg = (e && e.error && e.error.message) || '';
+    if (!msg.includes('data.geopf.fr') && !msg.includes('tiles.openfreemap')) return;
+
+    echecs++;
+    if (echecs < SEUIL) return;
+
+    map.off('error', surErreur);
+    console.warn(`Fond « ${styleKey} » injoignable, retour au fond standard.`);
+
+    localStorage.setItem(MAP_STYLE_KEY, 'standard');
+    marquerStyleActif('standard');
+    changeMapStyle(map, 'standard', reinjecterCouches);
+
+    afficherAlerteCarte(
+      "Le fond de carte choisi est momentanément indisponible. "
+      + "Le fond standard a été rétabli ; vous pourrez y revenir plus tard depuis les Modes Plan."
+    );
+    setTimeout(() => afficherAlerteCarte(null), 8000);
+  };
+
+  map.on('error', surErreur);
+  setTimeout(() => map.off('error', surErreur), delaiMs);
+}
+
 function appliquerStyle(styleKey) {
   const note = document.getElementById('mp-erreur');
   if (note) note.style.display = 'none';
@@ -500,6 +540,18 @@ function messageGeolocalisation(err) {
     default:
       return "Position indisponible.";
   }
+}
+
+function afficherAlerteCarte(texte) {
+  const zone = document.getElementById('alerte-carte');
+  if (!zone) return;
+  if (!texte) {
+    zone.classList.remove('visible');
+    zone.textContent = '';
+    return;
+  }
+  zone.textContent = texte;
+  zone.classList.add('visible');
 }
 
 function afficherAlerteGeolocalisation(texte) {
