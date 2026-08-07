@@ -16,7 +16,7 @@
 // service worker : l'activation purge tous les caches portant un
 // autre nom, ce qui évite qu'une ancienne version de l'app
 // continue d'être servie après un déploiement.
-const CACHE_NAME = 'iter-v15';
+const CACHE_NAME = 'iter-v16';
 const ASSETS = [
   './index.html',
   './historique.html',
@@ -48,6 +48,15 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)).catch(() => {})
   );
   self.skipWaiting();
+});
+
+// Une page peut demander à ce worker de prendre la main sans
+// attendre la fermeture de tous les onglets. Sans cela, une
+// version corrigée peut rester inactive plusieurs jours.
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'PRENDRE_LA_MAIN') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', (event) => {

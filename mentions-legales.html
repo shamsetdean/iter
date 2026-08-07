@@ -97,5 +97,55 @@
     contacter directement l'éditeur.
   </p>
 </div>
+<script>
+// ------------------------------------------------------------
+// Mise à jour automatique de l'application.
+//
+// Le navigateur met sw.js lui-même en cache (jusqu'à 24 h) : sans
+// précaution, il ne découvre jamais qu'une nouvelle version existe
+// et continue de servir l'ancienne, même après un rechargement.
+// D'où :
+//   * updateViaCache: 'none' — sw.js est toujours redemandé au
+//     serveur, jamais lu depuis le cache ;
+//   * une vérification à chaque ouverture et toutes les 15 min ;
+//   * un rechargement unique quand un nouveau worker prend la main,
+//     pour que les fichiers à jour soient réellement appliqués.
+// ------------------------------------------------------------
+if ('serviceWorker' in navigator) {
+  let rechargementEnCours = false;
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // Le garde-fou évite une boucle de rechargement si plusieurs
+    // changements de contrôleur se succèdent.
+    if (rechargementEnCours) return;
+    rechargementEnCours = true;
+    window.location.reload();
+  });
+
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('sw.js', { updateViaCache: 'none' })
+      .then((registration) => {
+        registration.update();
+        setInterval(() => registration.update(), 15 * 60 * 1000);
+
+        registration.addEventListener('updatefound', () => {
+          const nouveau = registration.installing;
+          if (!nouveau) return;
+          nouveau.addEventListener('statechange', () => {
+            // Installé alors qu'un worker contrôle déjà la page :
+            // c'est une mise à jour, on lui demande de prendre la
+            // main immédiatement plutôt que d'attendre la fermeture
+            // de tous les onglets.
+            if (nouveau.state === 'installed' && navigator.serviceWorker.controller) {
+              nouveau.postMessage({ type: 'PRENDRE_LA_MAIN' });
+            }
+          });
+        });
+      })
+      .catch((e) => console.warn('Service worker non enregistré :', e));
+  });
+}
+</script>
 </body>
 </html>
