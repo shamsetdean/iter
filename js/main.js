@@ -26,6 +26,7 @@ import {
   creerMarqueurSignalement,
   envoyerPhoto,
   supprimerSignalement,
+  changerStatutSignalement,
 } from './signalements.js';
 
 let map = null;
@@ -249,7 +250,7 @@ async function chargerProfilEtDroits() {
 
   const [resProfil, resDroits] = await Promise.all([
     supabase.from('profils').select('role, nom, type_energie, consommation, avatar_chemin').eq('user_id', session.user.id).maybeSingle(),
-    supabase.from('droits').select('domaine, consulter, enregistrer, traiter, modifier, supprimer').eq('user_id', session.user.id),
+    supabase.from('droits').select('domaine, consulter, enregistrer, traiter, modifier, supprimer, type_parcours, acces_historique').eq('user_id', session.user.id),
   ]);
 
   profil = resProfil.data || { role: 'utilisateur', nom: null, type_energie: 'gazole', consommation: 6.5, avatar_chemin: null };
@@ -303,8 +304,42 @@ async function majPhotoPosition() {
   if (coeur) coeur.style.display = 'none';
 }
 
+// Types de parcours autorisés à l'enregistrement. La base refuse
+// de toute façon un type non permis : ce filtrage n'est là que
+// pour ne pas proposer un bouton qui échouerait.
+function typesParcoursAutorises() {
+  if (profil && profil.role === 'administrateur') return ['pied', 'voiture'];
+  const restriction = (droits.pm && droits.pm.type_parcours) || 'tous';
+  return restriction === 'tous' ? ['pied', 'voiture'] : [restriction];
+}
+
 function appliquerDroitsInterface() {
   const estAdmin = profil && profil.role === 'administrateur';
+
+  // Historique : droit explicite, distinct de l'enregistrement.
+  // Collecter des données n'implique pas de pouvoir les relire.
+  const lienHistorique = document.getElementById('lien-historique');
+  if (lienHistorique) {
+    const acces = estAdmin || Boolean(droits.pm && droits.pm.acces_historique);
+    lienHistorique.style.display = acces ? 'flex' : 'none';
+  }
+
+  // Sélecteur pied / voiture, limité aux types autorisés
+  const autorises = typesParcoursAutorises();
+  document.querySelectorAll('.type-choice').forEach((btn) => {
+    const permis = autorises.includes(btn.dataset.type);
+    btn.style.display = permis ? 'flex' : 'none';
+  });
+
+  // Si le type actuellement sélectionné n'est plus permis, on
+  // bascule sur le premier autorisé, sinon l'enregistrement
+  // partirait avec un type que la base rejettera.
+  if (!autorises.includes(currentType) && autorises.length > 0) {
+    currentType = autorises[0];
+    document.querySelectorAll('.type-choice').forEach((b) => {
+      b.classList.toggle('active', b.dataset.type === currentType);
+    });
+  }
 
   // Supervision et import : réservés à l'administrateur
   const lienSupervision = document.getElementById('lien-supervision');
@@ -1052,14 +1087,35 @@ async function envoyerSignalement(type, bouton) {
 
 function ajouterMarqueurSignalement(signalement) {
   if (!map) return;
+
+  const info = typeof identite === 'function' ? identite(signalement.user_id) : null;
+  const estAuteur = session && signalement.user_id === session.user.id;
+
   const marqueur = creerMarqueurSignalement(signalement, {
     supabase,
+    auteur: estAuteur ? null : (info && info.nom) || null,
     peutSupprimer: peut('te', 'supprimer'),
+    peutTraiter: peut('te', 'traiter'),
     surSuppression: (s) => effacerSignalement(s, marqueur),
+    surTraitement: (s, statut) => traiterSignalement(s, statut, marqueur),
   });
   if (!marqueur) return;
   marqueur.addTo(map);
   marqueursSignalements.push(marqueur);
+}
+
+// Marquer traité, ou rouvrir. Le marqueur est reconstruit pour que
+// la bulle reflète le nouvel état sans recharger toute la carte.
+async function traiterSignalement(signalement, statut, marqueur) {
+  try {
+    await changerStatutSignalement(supabase, session, signalement.id, statut);
+    signalement.statut = statut;
+    marqueur.remove();
+    marqueursSignalements = marqueursSignalements.filter((m) => m !== marqueur);
+    ajouterMarqueurSignalement(signalement);
+  } catch (err) {
+    alert(`Mise à jour impossible : ${err.message}`);
+  }
 }
 
 async function effacerSignalement(signalement, marqueur) {
@@ -1083,7 +1139,19 @@ export function effacerMarqueursSignalements() {
 
 async function afficherSignalementsExistants() {
   if (!map || !session) return;
-  const liste = await chargerSignalements(supabase, { userId: session.user.id });
+
+  // Avec le droit « consulter », on affiche les signalements de
+  // toute l'équipe : sans cela, quelqu'un chargé de les traiter ne
+  // verrait que les siens et son droit serait inopérant.
+  const voitTout = peut('te', 'consulter');
+  const liste = await chargerSignalements(
+    supabase,
+    voitTout ? {} : { userId: session.user.id }
+  );
+
+  // Les noms servent à afficher l'auteur dans la bulle
+  if (voitTout) await chargerIdentites(supabase);
+
   liste.forEach(ajouterMarqueurSignalement);
 }
 

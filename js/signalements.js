@@ -198,7 +198,14 @@ export async function supprimerSignalement(supabase, id, cheminPhoto = null) {
 // Affichage sur la carte
 // ------------------------------------------------------------
 export function creerMarqueurSignalement(signalement, options = {}) {
-  const { auteur = null, supabase = null, surSuppression = null, peutSupprimer = false } = options;
+  const {
+    auteur = null,
+    supabase = null,
+    surSuppression = null,
+    surTraitement = null,
+    peutSupprimer = false,
+    peutTraiter = false,
+  } = options;
 
   const def = TYPES_SIGNALEMENT[signalement.type];
   if (!def) return null;
@@ -214,18 +221,21 @@ export function creerMarqueurSignalement(signalement, options = {}) {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
   });
 
+  const traite = signalement.statut === 'traite';
+
   const contenu = document.createElement('div');
   contenu.className = 'popup-signalement';
   contenu.innerHTML = `
     <div class="ps-titre" style="color:${def.couleur}">${def.libelle}</div>
     <div class="ps-meta">${auteur ? auteur + ' · ' : ''}${date}</div>
     ${signalement.commentaire ? `<div class="ps-note">« ${signalement.commentaire} »</div>` : ''}
-    ${signalement.statut !== 'ouvert' ? `<div class="ps-statut">${signalement.statut === 'traite' ? 'Traité' : 'En cours'}</div>` : ''}
+    ${traite ? '<div class="ps-statut">Traité</div>' : ''}
     <div class="ps-photo" data-photo></div>
-    ${peutSupprimer ? '<button class="ps-supprimer" data-supprimer>Supprimer ce signalement</button>' : ''}
+    ${peutTraiter ? `<button class="ps-traiter" data-traiter>${traite ? 'Rouvrir' : 'Marquer comme traité'}</button>` : ''}
+    ${peutSupprimer ? '<button class="ps-supprimer" data-supprimer>Supprimer</button>' : ''}
   `;
 
-  // Photo : chargée à la demande, via une URL signée temporaire
+  // Photo chargée à la demande, via une URL signée temporaire
   if (signalement.photo_chemin && supabase) {
     urlPhoto(supabase, signalement.photo_chemin).then((url) => {
       const zone = contenu.querySelector('[data-photo]');
@@ -236,6 +246,12 @@ export function creerMarqueurSignalement(signalement, options = {}) {
       img.loading = 'lazy';
       img.addEventListener('click', () => window.open(url, '_blank', 'noopener'));
       zone.appendChild(img);
+    });
+  }
+
+  if (peutTraiter && surTraitement) {
+    contenu.querySelector('[data-traiter]')?.addEventListener('click', () => {
+      surTraitement(signalement, traite ? 'ouvert' : 'traite');
     });
   }
 
