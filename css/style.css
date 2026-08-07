@@ -1135,21 +1135,31 @@ button:focus-visible {
 /* ------------------------------------------------------------
    Alerte de géolocalisation — visible sans masquer la carte
    ------------------------------------------------------------ */
-#alerte-geoloc {
+/* Deux alertes distinctes : position et fond de carte. Elles
+   peuvent survenir ensemble, elles ne doivent donc pas se
+   remplacer l'une l'autre. */
+#alertes {
   position: fixed;
   left: 50%;
   top: calc(var(--safe-t) + 74px);
   transform: translateX(-50%);
   z-index: 46;
-  display: none;
   width: calc(100% - 32px);
   max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+#alerte-geoloc, #alerte-carte {
+  display: none;
   padding: 12px 15px;
   border-radius: 12px;
-  background: rgba(239, 83, 80, 0.95);
   color: #fff;
   font-size: 12.5px;
   line-height: 1.5;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
-#alerte-geoloc.visible { display: block; }
+#alerte-geoloc { background: rgba(239, 83, 80, 0.95); }
+#alerte-carte  { background: rgba(245, 166, 35, 0.95); color: #0a0e1a; }
+#alerte-geoloc.visible, #alerte-carte.visible { display: block; }
