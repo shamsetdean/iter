@@ -81,6 +81,30 @@ async function charger() {
     return;
   }
 
+  // Masquer le lien dans la barre du haut ne protège rien :
+  // l'adresse de cette page reste saisissable directement. On
+  // vérifie donc le droit ici aussi. Cela reste un confort
+  // d'affichage — la vraie protection est côté base, qui ne
+  // renverra que les données auxquelles la personne a droit.
+  const { data: profilCourant } = await supabase
+    .from('profils').select('role').eq('user_id', session.user.id).maybeSingle();
+
+  if (!profilCourant || profilCourant.role !== 'administrateur') {
+    const { data: droitPm } = await supabase
+      .from('droits').select('acces_historique')
+      .eq('user_id', session.user.id).eq('domaine', 'pm').maybeSingle();
+
+    if (!droitPm || droitPm.acces_historique !== true) {
+      if (liste) {
+        liste.className = 'etat';
+        liste.innerHTML = "L'accès à l'historique ne vous est pas ouvert."
+          + '<br><br><a href="index.html" style="color:var(--blue);">Retour à l\'application</a>';
+      }
+      document.querySelector('.hist-topbar')?.style.setProperty('display', 'none');
+      return;
+    }
+  }
+
   const { data, error } = await supabase
     .from('parcours')
     .select('*')
