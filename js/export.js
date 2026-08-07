@@ -17,8 +17,16 @@ function downloadFile(filename, content, mimeType) {
   a.download = filename;
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // a.remove() plutôt que document.body.removeChild(a) : la
+  // seconde forme lève « The node to be removed is not a child of
+  // this node » si le navigateur a déjà détaché le lien, ce qui
+  // arrive sur Safari et quand une navigation suit le clic.
+  // a.remove() ne fait rien dans ce cas, sans lever d'erreur.
+  a.remove();
+  // Révocation différée : la faire immédiatement après le clic
+  // interrompt le téléchargement sur certains navigateurs, qui
+  // n'ont pas encore fini de lire le blob.
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
 }
 
 export function exportGPX(parcours, points) {
