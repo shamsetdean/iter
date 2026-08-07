@@ -248,7 +248,9 @@
       </button>
     </div>
     <p class="fs-position" id="fs-position">Position en cours d'acquisition…</p>
-    <div class="fs-types" id="fs-types"></div>
+
+    <!-- Ordre voulu : on renseigne d'abord la précision et la
+         photo, le choix du type valide et envoie le signalement. -->
     <div class="fs-commentaire">
       <label for="fs-note">Précision (facultatif)</label>
       <input type="text" id="fs-note" maxlength="200" placeholder="Ex. : branche basse sur le trottoir">
@@ -262,6 +264,9 @@
       </button>
       <div id="fs-photo-apercu" class="fs-photo-apercu"></div>
     </div>
+
+    <p class="fs-choix-type">Choisissez le type pour envoyer</p>
+    <div class="fs-types" id="fs-types"></div>
 
     <p class="fs-retour" id="fs-retour"></p>
   </div>
