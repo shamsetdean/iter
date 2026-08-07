@@ -476,14 +476,58 @@ function appliquerStyle(styleKey) {
   marquerStyleActif(styleKey);
 }
 
+// ------------------------------------------------------------
+// Géolocalisation : un échec doit être visible et explicité.
+//
+// Sans message, l'application paraît simplement figée : la carte
+// ne suit pas, le signalement refuse de partir, et rien n'indique
+// pourquoi. Une autorisation refusée dans le navigateur ne se
+// redemande jamais d'elle-même, il faut aller la rétablir.
+// ------------------------------------------------------------
+function messageGeolocalisation(err) {
+  if (!err) return "Position indisponible.";
+
+  switch (err.code) {
+    case 1: // PERMISSION_DENIED
+      return "L'accès à votre position est refusé pour ce site. "
+        + "Autorisez la localisation dans les réglages du navigateur, puis rechargez la page. "
+        + "L'autorisation accordée à d'autres applications (Plans, Waze) ne s'applique pas ici.";
+    case 2: // POSITION_UNAVAILABLE
+      return "Position introuvable pour le moment. Vérifiez que la localisation est activée sur l'appareil, "
+        + "et placez-vous à l'extérieur si vous êtes dans un bâtiment.";
+    case 3: // TIMEOUT
+      return "Le signal GPS met trop de temps à arriver. Nouvelle tentative en cours…";
+    default:
+      return "Position indisponible.";
+  }
+}
+
+function afficherAlerteGeolocalisation(texte) {
+  const zone = document.getElementById('alerte-geoloc');
+  if (!zone) return;
+  if (!texte) {
+    zone.classList.remove('visible');
+    zone.textContent = '';
+    return;
+  }
+  zone.textContent = texte;
+  zone.classList.add('visible');
+}
+
 function startLiveLocationWatch() {
-  if (!('geolocation' in navigator)) return;
+  if (!('geolocation' in navigator)) {
+    afficherAlerteGeolocalisation(
+      "Cet appareil ou ce navigateur ne fournit pas de position. Essayez avec Safari ou Chrome à jour."
+    );
+    return;
+  }
 
   liveWatchId = navigator.geolocation.watchPosition(
     (pos) => {
       const { latitude, longitude, accuracy, heading } = pos.coords;
 
       dernierePosition = { lat: latitude, lng: longitude, accuracy };
+      afficherAlerteGeolocalisation(null); // la position est revenue
 
       if (userMarker) {
         updateUserMarker(userMarker, longitude, latitude, accuracy, heading);
@@ -493,7 +537,14 @@ function startLiveLocationWatch() {
         followUser(map, longitude, latitude, heading);
       }
     },
-    (err) => console.warn('Suivi position live indisponible:', err),
+    (err) => {
+      console.warn('Suivi de position indisponible :', err);
+      // Un dépassement de délai est fréquent et transitoire : on ne
+      // l'affiche que si aucune position n'a encore été obtenue,
+      // pour ne pas alarmer pendant un trajet qui fonctionne.
+      if (err && err.code === 3 && dernierePosition) return;
+      afficherAlerteGeolocalisation(messageGeolocalisation(err));
+    },
     { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
   );
 }
