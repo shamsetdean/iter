@@ -63,7 +63,7 @@
       <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
     <input type="file" id="import-input" accept=".gpx,.csv" style="display:none;">
-    <a href="historique.html" class="topbar-btn" title="Historique" aria-label="Historique">
+    <a href="historique.html" class="topbar-btn" id="lien-historique" title="Historique" aria-label="Historique">
       <svg viewBox="0 0 24 24"><path d="M3 3v5h5M3.05 13a9 9 0 1 0 2.13-6.36L3 8" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 7v5l4 2" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </a>
     <a href="supervision.html" class="topbar-btn" id="lien-supervision" title="Supervision" aria-label="Supervision" style="display:none;">
@@ -266,6 +266,8 @@
     <p class="fs-retour" id="fs-retour"></p>
   </div>
 </div>
+
+<div id="alerte-geoloc" role="status" aria-live="polite"></div>
 
 <!-- ============================================================
      CARTE
