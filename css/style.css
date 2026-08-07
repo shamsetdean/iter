@@ -478,6 +478,16 @@ body.ui-idle #boutons-flottants { opacity: 0.16; }
 .fs-position.prete { color: var(--green); }
 .fs-position.erreur { color: var(--danger); }
 
+/* Intitulé qui précède les types : le choix vaut envoi, il faut
+   que ce soit dit avant que la personne n'appuie. */
+.fs-choix-type {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+  margin: 20px 0 9px;
+  font-weight: 700;
+}
 .fs-types { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 10px; }
 .fs-type {
   display: flex;
@@ -498,7 +508,7 @@ body.ui-idle #boutons-flottants { opacity: 0.16; }
 }
 .fs-type .nom { font-size: 12px; font-weight: 600; color: var(--ink); text-align: center; line-height: 1.25; }
 
-.fs-commentaire { margin-top: 16px; }
+.fs-commentaire { margin-top: 4px; }
 .fs-commentaire label {
   display: block; font-size: 11px; text-transform: uppercase;
   letter-spacing: 0.08em; color: var(--ink-dim); margin-bottom: 6px;
