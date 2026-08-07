@@ -16,7 +16,7 @@
 // service worker : l'activation purge tous les caches portant un
 // autre nom, ce qui évite qu'une ancienne version de l'app
 // continue d'être servie après un déploiement.
-const CACHE_NAME = 'iter-v20';
+const CACHE_NAME = 'iter-v21';
 const ASSETS = [
   './index.html',
   './historique.html',
