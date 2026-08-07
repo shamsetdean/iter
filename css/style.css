@@ -1112,3 +1112,12 @@ button:focus-visible {
   margin-bottom: 7px;
 }
 .popup-signalement .ps-auteur .pastille-identite { width: 28px; height: 28px; border-width: 2px; }
+
+/* Bouton de traitement dans la bulle d'un signalement */
+.popup-signalement .ps-traiter {
+  width: 100%; margin-top: 10px; padding: 8px;
+  border-radius: 8px; font-size: 12px; font-weight: 600;
+  background: rgba(61, 220, 151, 0.14);
+  border: 1px solid var(--green);
+  color: var(--green);
+}
