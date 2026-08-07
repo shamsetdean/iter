@@ -110,15 +110,50 @@ document.getElementById('auth-submit')?.addEventListener('click', async () => {
     : await signUp(email, password);
 
   if (error) {
-    authError.textContent = error.message;
+    authError.style.color = 'var(--danger)';
+    authError.textContent = messageErreurAuth(error, authMode);
     return;
   }
 
   if (authMode === 'signup') {
     authError.style.color = 'var(--ok)';
-    authError.textContent = 'Compte créé — vérifie ta boîte mail si une confirmation est requise.';
+    authError.textContent = 'Compte créé — vérifiez votre boîte mail pour confirmer l\'adresse.';
   }
 });
+
+// L'inscription passe par une liste blanche contrôlée en base.
+// Quand une adresse n'y figure pas, Supabase renvoie une erreur
+// technique opaque (« Database error saving new user ») qui ne
+// dit rien à la personne : on la traduit en message utile.
+function messageErreurAuth(error, mode) {
+  const brut = (error && error.message ? error.message : '').toLowerCase();
+
+  if (mode === 'signup') {
+    if (brut.includes('database error')
+        || brut.includes("n'est pas autorisée")
+        || brut.includes('not authorized')
+        || brut.includes('unexpected_failure')) {
+      return "Cette adresse n'est pas autorisée à créer un compte. Demandez à l'administrateur de l'ajouter au préalable.";
+    }
+    if (brut.includes('already registered') || brut.includes('already been registered')) {
+      return 'Un compte existe déjà pour cette adresse. Utilisez « Se connecter », ou « Mot de passe oublié ».';
+    }
+    if (brut.includes('password') && brut.includes('6')) {
+      return 'Le mot de passe doit contenir au moins 6 caractères.';
+    }
+  }
+
+  if (mode === 'signin') {
+    if (brut.includes('invalid login credentials')) {
+      return 'Adresse ou mot de passe incorrect.';
+    }
+    if (brut.includes('email not confirmed')) {
+      return "Adresse non confirmée. Ouvrez le lien reçu par courriel avant de vous connecter.";
+    }
+  }
+
+  return error && error.message ? error.message : 'Une erreur est survenue.';
+}
 
 document.getElementById('auth-oubli')?.addEventListener('click', async () => {
   const email = emailInput?.value.trim();
