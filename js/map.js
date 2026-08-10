@@ -56,12 +56,13 @@ export const LIBELLES_STYLES = {
   satellite: 'Satellite',
 };
 
-export function initMap(containerId, center = [2.6167, 48.8], zoom = 13, styleKey = 'standard') {
+export function initMap(containerId, center = [2.6167, 48.8], zoom = 13, styleKey = 'standard', maxBounds = null) {
   const map = new maplibregl.Map({
     container: containerId,
     style: STYLES[styleKey] || STYLES.standard,
     center,
     zoom,
+    maxBounds: maxBounds || undefined,
     attributionControl: true,
     preserveDrawingBuffer: true, // indispensable pour pouvoir capturer la carte déjà visible lors du partage
   });
@@ -71,6 +72,78 @@ export function initMap(containerId, center = [2.6167, 48.8], zoom = 13, styleKe
   // bien plus grands, sont câblés côté application.
 
   return map;
+}
+
+// ------------------------------------------------------------
+// Cloisonnement par zone (1 zone = 1 ville)
+//
+// calculerBounds() donne une limite grossière (carré) utilisable
+// immédiatement, y compris avant d'avoir le contour exact de la
+// commune (ex. pendant que celui-ci se charge, ou s'il échoue).
+// ------------------------------------------------------------
+export function calculerBounds(zone, margeKm = 1) {
+  if (!zone || zone.lat == null || zone.lng == null) return null;
+  const rayon = (zone.rayon_km || 3) + margeKm;
+  const dLat = rayon / 111; // 1° de latitude ≈ 111 km, approximation suffisante à cette échelle
+  const dLng = rayon / (111 * Math.cos((zone.lat * Math.PI) / 180));
+  return [
+    [zone.lng - dLng, zone.lat - dLat],
+    [zone.lng + dLng, zone.lat + dLat],
+  ];
+}
+
+// Grise tout ce qui est en dehors du contour de la zone (polygone
+// GeoJSON de la commune, ex. via geo.api.gouv.fr). Une seule
+// couche, ajoutée par-dessus le fond : fonctionne quel que soit le
+// style choisi (standard / plan IGN / satellite), et est donc
+// réappliquée après chaque changement de fond (voir main.js).
+const ID_MASQUE = 'masque-hors-zone';
+
+export function appliquerMasqueZone(map, contourGeoJSON) {
+  if (!map || !contourGeoJSON) return;
+  retirerMasqueZone(map);
+
+  // Polygone couvrant le monde entier, avec un "trou" à la forme
+  // de la commune : tout ce qui reste plein (donc grisé) est hors
+  // zone. C'est la technique standard de masquage MapLibre/Mapbox.
+  const monde = [
+    [-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85],
+  ];
+  const trous = contourGeoJSON.geometry.type === 'MultiPolygon'
+    ? contourGeoJSON.geometry.coordinates.map((poly) => poly[0])
+    : [contourGeoJSON.geometry.coordinates[0]];
+
+  map.addSource(ID_MASQUE, {
+    type: 'geojson',
+    data: {
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [monde, ...trous] },
+    },
+  });
+
+  map.addLayer({
+    id: ID_MASQUE,
+    type: 'fill',
+    source: ID_MASQUE,
+    paint: { 'fill-color': '#0a0e1a', 'fill-opacity': 0.72 },
+  });
+
+  // Liseré sur le contour de la commune, pour une limite nette
+  map.addSource(`${ID_MASQUE}-ligne`, { type: 'geojson', data: contourGeoJSON });
+  map.addLayer({
+    id: `${ID_MASQUE}-ligne`,
+    type: 'line',
+    source: `${ID_MASQUE}-ligne`,
+    paint: { 'line-color': '#c9a066', 'line-width': 1.5, 'line-opacity': 0.8 },
+  });
+}
+
+export function retirerMasqueZone(map) {
+  if (!map) return;
+  [ID_MASQUE, `${ID_MASQUE}-ligne`].forEach((id) => {
+    if (map.getLayer(id)) map.removeLayer(id);
+    if (map.getSource(id)) map.removeSource(id);
+  });
 }
 
 // Change le style de fond de carte à chaud. Comme setStyle()

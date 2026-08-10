@@ -6,7 +6,8 @@
 // ============================================================
 
 import { supabase, getSession, signIn, signUp, signOut, onAuthChange, envoyerLienReinitialisation } from './supabase-client.js';
-import { initMap, setupTraceLayer, pushPointToTrace, createUserMarker, updateUserMarker, followUser, drawFullTrace, changeMapStyle, STYLES } from './map.js';
+import { initMap, setupTraceLayer, pushPointToTrace, createUserMarker, updateUserMarker, followUser, drawFullTrace, changeMapStyle, STYLES, calculerBounds, appliquerMasqueZone } from './map.js';
+import { chargerZoneUtilisateur, chargerContourZone } from './zone.js';
 import { SessionTracking, distanceM } from './tracking.js';
 import { getPrixEnergie, calculerCoutTrajet, calculerConsommation, LIBELLES_ENERGIE } from './cout.js';
 import { exportGPX, exportCSV } from './export.js';
@@ -188,10 +189,13 @@ document.getElementById('auth-toggle')?.addEventListener('click', () => {
 const ONBOARDING_KEY = 'iter_onboarding_vu';
 const onboardingScreen = document.getElementById('onboarding-screen');
 
+let demarrageEnCours = false;
+
 function apresConnexion() {
-  if (map) return; // déjà démarré
+  if (map || demarrageEnCours) return; // déjà démarré, ou en cours de démarrage
   if (localStorage.getItem(ONBOARDING_KEY)) {
-    startApp();
+    demarrageEnCours = true;
+    startApp().finally(() => { demarrageEnCours = false; });
   } else {
     onboardingScreen.style.display = 'flex';
   }
@@ -200,7 +204,7 @@ function apresConnexion() {
 document.getElementById('onboarding-close')?.addEventListener('click', () => {
   localStorage.setItem(ONBOARDING_KEY, '1');
   onboardingScreen.style.display = 'none';
-  if (!map) startApp();
+  if (!map && !demarrageEnCours) { demarrageEnCours = true; startApp().finally(() => { demarrageEnCours = false; }); }
 });
 
 document.getElementById('btn-aide')?.addEventListener('click', () => {
@@ -250,7 +254,7 @@ async function chargerProfilEtDroits() {
 
   const [resProfil, resDroits] = await Promise.all([
     supabase.from('profils').select('role, nom, type_energie, consommation, avatar_chemin').eq('user_id', session.user.id).maybeSingle(),
-    supabase.from('droits').select('domaine, consulter, enregistrer, traiter, modifier, supprimer, type_parcours, acces_historique').eq('user_id', session.user.id),
+    supabase.from('droits').select('domaine, consulter, enregistrer, traiter, modifier, supprimer, type_parcours, acces_historique, acces_dashboard').eq('user_id', session.user.id),
   ]);
 
   profil = resProfil.data || { role: 'utilisateur', nom: null, type_energie: 'gazole', consommation: 6.5, avatar_chemin: null };
@@ -341,9 +345,14 @@ function appliquerDroitsInterface() {
     });
   }
 
-  // Supervision et import : réservés à l'administrateur
+  // Supervision : ouverte aux administrateurs ET aux comptes ayant
+  // le droit explicite « acces_dashboard » (domaine te), distinct
+  // du rôle administrateur complet — cf. acces_historique plus haut.
+  const accesDashboard = estAdmin || Boolean(droits.te && droits.te.acces_dashboard);
   const lienSupervision = document.getElementById('lien-supervision');
-  if (lienSupervision) lienSupervision.style.display = estAdmin ? 'flex' : 'none';
+  if (lienSupervision) lienSupervision.style.display = accesDashboard ? 'flex' : 'none';
+
+  // Import : reste réservé à l'administrateur complet.
   const btnImport = document.getElementById('btn-import');
   if (btnImport) btnImport.style.display = estAdmin ? 'flex' : 'none';
 
@@ -365,10 +374,21 @@ function appliquerDroitsInterface() {
   }
 }
 
-function startApp() {
+let contourZoneActive = null; // GeoJSON du contour de la zone en cours, réutilisé après changement de fond
+
+async function startApp() {
   chargerProfilEtDroits();
+
+  // Zone (1 zone = 1 ville) : la carte est bornée et masquée à la
+  // zone de la personne connectée avant même sa première image,
+  // pour qu'aucune autre ville ne soit jamais visible en la
+  // faisant glisser ou en dézoomant.
+  const zone = await chargerZoneUtilisateur(session ? session.user.id : null);
+  const bounds = calculerBounds(zone);
+  const centre = zone ? [zone.lng, zone.lat] : undefined;
+
   const stylePref = localStorage.getItem(MAP_STYLE_KEY) || 'standard';
-  map = initMap('map', undefined, undefined, stylePref);
+  map = initMap('map', centre, centre ? 14 : undefined, stylePref, bounds);
   map.on('load', () => {
     setupTraceLayer(map, 'trace-live');
     userMarker = createUserMarker(map);
@@ -377,6 +397,18 @@ function startApp() {
     startLiveLocationWatch();
     afficherSignalementsExistants();
   });
+
+  // Contour exact de la commune : affiné dès qu'il arrive (le
+  // carré de calculerBounds() reste actif entre-temps, donc la
+  // carte n'est jamais dé-bornée le temps du chargement).
+  if (zone) {
+    chargerContourZone(zone).then((contour) => {
+      if (!contour) return;
+      contourZoneActive = contour;
+      if (map.isStyleLoaded()) appliquerMasqueZone(map, contour);
+      else map.once('load', () => appliquerMasqueZone(map, contour));
+    });
+  }
 
   // Un fond de carte peut devenir indisponible : serveur en panne,
   // couche retirée, zone non couverte. Le repli n'existait que lors
@@ -453,6 +485,7 @@ function reinjecterCouches() {
   } else if (lastParcours && lastParcours.points.length > 1) {
     drawFullTrace(map, 'trace-live', lastParcours.points, lastParcours.type);
   }
+  if (contourZoneActive) appliquerMasqueZone(map, contourZoneActive);
 }
 
 // Surveille les échecs de chargement de tuiles. Au-delà de
@@ -1194,10 +1227,15 @@ function ajouterMarqueurSignalement(signalement) {
   const info = typeof identite === 'function' ? identite(signalement.user_id) : null;
   const estAuteur = session && signalement.user_id === session.user.id;
 
+  // Le droit « supprimer » ne vaut que pour ses PROPRES signalements.
+  // Un administrateur complet garde un accès total via peut().
+  const estAdminComplet = profil && profil.role === 'administrateur';
+  const peutSupprimerCeSignalement = estAdminComplet || (estAuteur && peut('te', 'supprimer'));
+
   const marqueur = creerMarqueurSignalement(signalement, {
     supabase,
     auteur: estAuteur ? null : (info && info.nom) || null,
-    peutSupprimer: peut('te', 'supprimer'),
+    peutSupprimer: peutSupprimerCeSignalement,
     peutTraiter: peut('te', 'traiter'),
     surSuppression: (s) => effacerSignalement(s, marqueur),
     surTraitement: (s, statut) => traiterSignalement(s, statut, marqueur),
