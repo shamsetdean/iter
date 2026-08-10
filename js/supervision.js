@@ -19,10 +19,16 @@
 import { supabase, getSession, signIn, signOut, onAuthChange, envoyerLienReinitialisation } from './supabase-client.js';
 import { STYLES } from './map.js';
 import {
-  TYPES_SIGNALEMENT,
-  svgSignalement,
+  svgIcone, LIBELLES_PRIORITE, LIBELLES_STATUT, LIBELLES_ICONES,
+  chargerCategories, chargerToutesSousCategories, chargerServices,
+  enregistrerCategorie, supprimerCategorie, basculerActiveCategorie,
+  enregistrerSousCategorie, supprimerSousCategorie, basculerActiveSousCategorie,
+  reordonner, slugify,
+} from './categories.js';
+import {
   chargerSignalements,
   changerStatutSignalement,
+  changerPrioriteSignalement,
   supprimerSignalement,
   creerMarqueurSignalement,
 } from './signalements.js';
@@ -38,9 +44,15 @@ let carte = null;
 let filtrePersonne = 'tous';
 let filtreType = 'tous';
 let signalements = [];
-let filtreStatutSig = 'ouvert';
+let filtreStatutSig = 'actifs';
 let marqueursSig = [];
 let sessionCourante = null;
+// estAdminComplet : rôle "administrateur" (tous les droits, y
+// compris administration des comptes et journal d'activité).
+// estAccesDashboard : peut ouvrir cette page (droits.te.acces_dashboard
+// ou administrateur), mais sans forcément voir la gestion des comptes.
+let estAdminComplet = false;
+let estAccesDashboard = false;
 
 // ------------------------------------------------------------
 // Formatage
@@ -124,22 +136,31 @@ async function verifierAcces() {
   // Même si cette vérification était contournée, les policies RLS
   // empêcheraient la lecture des données : c'est elles qui
   // protègent, pas cet écran.
-  const { data, error } = await supabase
-    .from('profils')
-    .select('role')
-    .eq('user_id', session.user.id)
-    .maybeSingle();
+  const [resProfil, resDroitTe] = await Promise.all([
+    supabase.from('profils').select('role').eq('user_id', session.user.id).maybeSingle(),
+    supabase.from('droits').select('acces_dashboard').eq('user_id', session.user.id).eq('domaine', 'te').maybeSingle(),
+  ]);
 
-  if (error) {
-    console.error('Lecture du profil impossible :', error);
+  if (resProfil.error) {
+    console.error('Lecture du profil impossible :', resProfil.error);
     afficherEcran('refus');
     return;
   }
 
-  if (!data || data.role !== 'administrateur') {
+  estAdminComplet = Boolean(resProfil.data && resProfil.data.role === 'administrateur');
+  estAccesDashboard = estAdminComplet || Boolean(resDroitTe.data && resDroitTe.data.acces_dashboard);
+
+  if (!estAccesDashboard) {
     afficherEcran('refus');
     return;
   }
+
+  // La gestion des comptes/droits et le journal d'activité restent
+  // réservés à l'administrateur complet : un accès "tableau de
+  // bord" seul ne donne qu'une vue de supervision opérationnelle.
+  document.getElementById('zone-admin-complet')?.style.setProperty('display', estAdminComplet ? '' : 'none');
+  const btnAjouterCompte = document.getElementById('btn-ajouter-compte');
+  if (btnAjouterCompte) btnAjouterCompte.style.display = estAdminComplet ? 'flex' : 'none';
 
   sessionCourante = session;
   afficherEcran('contenu');
@@ -169,15 +190,20 @@ async function charger() {
   profils = new Map((resProfils.data || []).map((p) => [p.user_id, p.nom || 'Sans nom']));
   parcours = resParcours.data || [];
 
-  await chargerJournal();
-  await chargerComptes();
-
   construireFiltrePersonnes();
   brancherFiltresSignalements();
   rendre();
   rendreSignalements();
-  rendreJournal();
-  rendreComptes();
+
+  if (estAdminComplet) {
+    await chargerJournal();
+    await chargerComptes();
+    await chargerCategoriesAdmin();
+    rendreJournal();
+    rendreComptes();
+    rendreCategoriesAdmin();
+  }
+
   await afficherCarte();
 }
 
@@ -482,12 +508,14 @@ function brancherFiltresSignalements() {
   });
 }
 
+const STATUTS_CLOS = ['resolu', 'cloture', 'non_recevable'];
+
 function signalementsFiltres() {
   return signalements.filter((s) => {
     if (filtrePersonne !== 'tous' && s.user_id !== filtrePersonne) return false;
     if (filtreStatutSig === 'tous') return true;
-    if (filtreStatutSig === 'ouvert') return s.statut !== 'traite';
-    return s.statut === filtreStatutSig;
+    if (filtreStatutSig === 'actifs') return !STATUTS_CLOS.includes(s.statut);
+    return STATUTS_CLOS.includes(s.statut);
   });
 }
 
@@ -506,18 +534,18 @@ function rendreSignalements() {
   el.className = '';
   el.innerHTML = liste
     .map((s) => {
-      const def = TYPES_SIGNALEMENT[s.type];
-      if (!def) return '';
+      const prio = LIBELLES_PRIORITE[s.priorite] || LIBELLES_PRIORITE.normal;
+      const nomAffiche = s.sous_categorie_nom || s.categorie_nom || 'Signalement';
       const date = new Date(s.created_at).toLocaleString('fr-FR', {
         day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
       });
-      const traite = s.statut === 'traite';
+      const clos = STATUTS_CLOS.includes(s.statut);
       return `
-      <div class="sig-ligne ${traite ? 'traite' : ''}" data-id="${s.id}">
-        <div class="sig-rond" style="background:${def.couleur}">${svgSignalement(s.type, 19, '#0a0e1a')}</div>
+      <div class="sig-ligne ${clos ? 'traite' : ''}" data-id="${s.id}">
+        <div class="sig-rond" style="background:${prio.couleur}">${svgIcone(s.categorie_icone || 'autre', 19, '#0a0e1a')}</div>
         <div class="sig-infos">
-          <div class="sig-type">${def.libelle}</div>
-          <div class="sig-meta">${profils.get(s.user_id) || 'Inconnu'} · ${date}${traite ? ' · traité' : ''}</div>
+          <div class="sig-type">${prio.emoji} ${nomAffiche}</div>
+          <div class="sig-meta">${s.categorie_nom || ''}${s.categorie_nom ? ' · ' : ''}${profils.get(s.user_id) || 'Inconnu'} · ${date} · ${LIBELLES_STATUT[s.statut] || s.statut}</div>
           ${s.commentaire ? `<div class="sig-note">« ${s.commentaire} »</div>` : ''}
         </div>
         <div class="sig-actions">
@@ -525,31 +553,46 @@ function rendreSignalements() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
           </button>
           ${
-            traite
-              ? `<button class="rouvrir" data-rouvrir="${s.id}" title="Rouvrir" aria-label="Rouvrir">
-                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5M3.05 13a9 9 0 1 0 2.13-6.36L3 8"/></svg>
-                 </button>`
-              : `<button class="valider" data-traiter="${s.id}" title="Marquer comme traité" aria-label="Marquer comme traité">
-                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-                 </button>`
+            estAdminComplet
+              ? `<select class="sig-statut-select" data-prio-select="${s.id}" title="Priorité">
+                  ${Object.entries(LIBELLES_PRIORITE).map(([v, p]) => `<option value="${v}" ${s.priorite === v ? 'selected' : ''}>${p.emoji} ${p.libelle}</option>`).join('')}
+                 </select>`
+              : ''
           }
-          <button class="suppr" data-suppr-sig="${s.id}" title="Supprimer" aria-label="Supprimer">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z"/></svg>
-          </button>
+          ${
+            estAdminComplet
+              ? `<select class="sig-statut-select" data-statut-select="${s.id}">
+                  ${Object.entries(LIBELLES_STATUT).map(([v, l]) => `<option value="${v}" ${s.statut === v ? 'selected' : ''}>${l}</option>`).join('')}
+                 </select>`
+              : ''
+          }
+          ${
+            estAdminComplet
+              ? `<button class="suppr" data-suppr-sig="${s.id}" title="Supprimer" aria-label="Supprimer">
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z"/></svg>
+                 </button>`
+              : ''
+          }
         </div>
       </div>`;
     })
     .join('');
 
-  el.querySelectorAll('[data-traiter]').forEach((b) =>
-    b.addEventListener('click', () => majStatut(b.dataset.traiter, 'traite'))
-  );
-  el.querySelectorAll('[data-rouvrir]').forEach((b) =>
-    b.addEventListener('click', () => majStatut(b.dataset.rouvrir, 'ouvert'))
-  );
-  el.querySelectorAll('[data-suppr-sig]').forEach((b) =>
-    b.addEventListener('click', () => effacerSignalement(b.dataset.supprSig))
-  );
+  // Changer le statut / supprimer depuis ce tableau de bord restent
+  // réservés à l'administrateur complet — un accès "dashboard"
+  // seul est une vue de consultation, pas un outil de modération
+  // sur les signalements d'autrui.
+  if (estAdminComplet) {
+    el.querySelectorAll('[data-statut-select]').forEach((sel) =>
+      sel.addEventListener('change', (e) => majStatut(sel.dataset.statutSelect, e.target.value))
+    );
+    el.querySelectorAll('[data-prio-select]').forEach((sel) =>
+      sel.addEventListener('change', (e) => majPriorite(sel.dataset.prioSelect, e.target.value))
+    );
+    el.querySelectorAll('[data-suppr-sig]').forEach((b) =>
+      b.addEventListener('click', () => effacerSignalement(b.dataset.supprSig))
+    );
+  }
   el.querySelectorAll('[data-loc]').forEach((b) =>
     b.addEventListener('click', () => localiser(b.dataset.loc))
   );
@@ -567,11 +610,23 @@ async function majStatut(id, statut) {
   }
 }
 
+async function majPriorite(id, priorite) {
+  try {
+    await changerPrioriteSignalement(supabase, id, priorite);
+    const s = signalements.find((x) => x.id === id);
+    if (s) s.priorite = priorite;
+    rendreSignalements();
+    dessinerSignalements();
+  } catch (err) {
+    alert(`Mise à jour impossible : ${err.message}`);
+  }
+}
+
 async function effacerSignalement(id) {
   const s = signalements.find((x) => x.id === id);
   if (!s) return;
-  const def = TYPES_SIGNALEMENT[s.type];
-  if (!confirm(`Supprimer définitivement ce signalement « ${def ? def.libelle : s.type} » ?`)) return;
+  const libelle = s.sous_categorie_nom || s.categorie_nom || 'ce signalement';
+  if (!confirm(`Supprimer définitivement ce signalement « ${libelle} » ?`)) return;
 
   try {
     await supprimerSignalement(supabase, id, s.photo_chemin);
@@ -1012,4 +1067,367 @@ document.getElementById('btn-export-journal')?.addEventListener('click', () => {
   // interrompt le téléchargement sur certains navigateurs, qui
   // n'ont pas encore fini de lire le blob.
   setTimeout(() => URL.revokeObjectURL(url), 15000);
+});
+
+// ============================================================
+// ADMINISTRATION DE LA TAXONOMIE — catégories et sous-catégories
+// de signalement. Entièrement configurable ici, sans toucher au
+// code (icône, service assigné, priorité par défaut, délai
+// indicatif, ordre d'affichage, activation).
+// ============================================================
+let categoriesAdmin = [];
+let sousCategoriesAdmin = [];
+let servicesAdmin = [];
+
+async function chargerCategoriesAdmin() {
+  const [cats, subs, services] = await Promise.all([
+    chargerCategories(supabase, { toutesInclusInactives: true }),
+    chargerToutesSousCategories(supabase, { toutesInclusInactives: true }),
+    chargerServices(supabase, { toutesInclusInactifs: true }),
+  ]);
+  categoriesAdmin = cats;
+  sousCategoriesAdmin = subs;
+  servicesAdmin = services;
+}
+
+function sousCategoriesDe(categoryId) {
+  return sousCategoriesAdmin
+    .filter((s) => s.category_id === categoryId)
+    .sort((a, b) => a.sort_order - b.sort_order);
+}
+
+function rendreCategoriesAdmin() {
+  const el = document.getElementById('liste-categories-admin');
+  if (!el) return;
+
+  if (categoriesAdmin.length === 0) {
+    el.className = 'etat';
+    el.innerHTML = 'Aucune catégorie.';
+    return;
+  }
+
+  const optionsIcones = LIBELLES_ICONES.map((i) => `<option value="${i}">${i}</option>`).join('');
+  const optionsServices = ['<option value="">— aucun —</option>']
+    .concat(servicesAdmin.map((s) => `<option value="${s.id}">${s.nom}</option>`))
+    .join('');
+  const optionsPriorite = Object.entries(LIBELLES_PRIORITE)
+    .map(([v, p]) => `<option value="${v}">${p.emoji} ${p.libelle}</option>`)
+    .join('');
+
+  const tri = [...categoriesAdmin].sort((a, b) => a.sort_order - b.sort_order);
+
+  el.className = '';
+  el.innerHTML = tri
+    .map((c, index) => {
+      const subs = sousCategoriesDe(c.id);
+      const lignesSub = subs
+        .map((s, si) => `
+        <div class="cat-sub-ligne ${!s.is_active ? 'inactive' : ''}" data-sub="${s.id}">
+          <button class="cat-fleche" data-sub-monter="${s.id}" ${si === 0 ? 'disabled' : ''} title="Monter">▲</button>
+          <button class="cat-fleche" data-sub-descendre="${s.id}" ${si === subs.length - 1 ? 'disabled' : ''} title="Descendre">▼</button>
+          <input type="text" class="cat-sub-nom" data-sub-nom="${s.id}" value="${s.nom.replace(/"/g, '&quot;')}">
+          <select data-sub-service="${s.id}">${optionsServices}</select>
+          <select data-sub-priorite="${s.id}">${optionsPriorite}</select>
+          <input type="number" min="0" class="cat-sub-delai" data-sub-delai="${s.id}" value="${s.delai_indicatif_jours ?? ''}" title="Délai indicatif (jours)">
+          <button class="cat-toggle ${s.is_active ? 'actif' : ''}" data-sub-toggle="${s.id}" title="${s.is_active ? 'Désactiver' : 'Activer'}">${s.is_active ? 'Actif' : 'Inactif'}</button>
+          <button class="cat-suppr" data-sub-suppr="${s.id}" title="Supprimer">✕</button>
+        </div>`)
+        .join('');
+
+      return `
+      <div class="cat-carte ${!c.is_active ? 'inactive' : ''}" data-cat="${c.id}">
+        <div class="cat-entete">
+          <button class="cat-fleche" data-cat-monter="${c.id}" ${index === 0 ? 'disabled' : ''} title="Monter">▲</button>
+          <button class="cat-fleche" data-cat-descendre="${c.id}" ${index === tri.length - 1 ? 'disabled' : ''} title="Descendre">▼</button>
+          <span class="cat-icone-apercu">${svgIcone(c.icone, 20, 'var(--ink)')}</span>
+          <input type="text" class="cat-nom" data-cat-nom="${c.id}" value="${c.nom.replace(/"/g, '&quot;')}">
+          <select data-cat-icone="${c.id}">${optionsIcones}</select>
+          <button class="cat-toggle ${c.is_active ? 'actif' : ''}" data-cat-toggle="${c.id}" title="${c.is_active ? 'Désactiver' : 'Activer'}">${c.is_active ? 'Active' : 'Inactive'}</button>
+          <button class="cat-suppr" data-cat-suppr="${c.id}" title="Supprimer la catégorie et ses sous-catégories">✕</button>
+        </div>
+        <div class="cat-sous-liste">${lignesSub}</div>
+        <button class="bt-action cat-ajouter-sub" data-ajouter-sub="${c.id}">+ Ajouter une sous-catégorie</button>
+        <span class="cat-retour" data-cat-retour="${c.id}"></span>
+      </div>`;
+    })
+    .join('');
+
+  // Pré-sélectionne les <select> (fait après coup : plus simple
+  // et plus sûr que d'injecter "selected" dans le HTML string).
+  tri.forEach((c) => {
+    const selIcone = el.querySelector(`[data-cat-icone="${c.id}"]`);
+    if (selIcone) selIcone.value = c.icone;
+    sousCategoriesDe(c.id).forEach((s) => {
+      const selService = el.querySelector(`[data-sub-service="${s.id}"]`);
+      if (selService) selService.value = s.service_id || '';
+      const selPrio = el.querySelector(`[data-sub-priorite="${s.id}"]`);
+      if (selPrio) selPrio.value = s.priorite_defaut;
+    });
+  });
+
+  brancherCategoriesAdmin();
+}
+
+function retourCategorie(categoryId, texte, type = '') {
+  const el = document.querySelector(`[data-cat-retour="${categoryId}"]`);
+  if (!el) return;
+  el.textContent = texte;
+  el.className = `cat-retour ${type}`;
+  if (texte) setTimeout(() => { if (el.textContent === texte) el.textContent = ''; }, 3000);
+}
+
+async function rafraichirEtRerendre() {
+  await chargerCategoriesAdmin();
+  rendreCategoriesAdmin();
+}
+
+function brancherCategoriesAdmin() {
+  // ---- Catégories ----
+  document.querySelectorAll('[data-cat-nom]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const id = input.dataset.catNom;
+      const cat = categoriesAdmin.find((c) => c.id === id);
+      if (!cat || !input.value.trim()) return;
+      try {
+        await enregistrerCategorie(supabase, { ...cat, nom: input.value.trim() });
+        cat.nom = input.value.trim();
+        retourCategorie(id, 'Nom mis à jour', 'succes');
+      } catch (err) {
+        retourCategorie(id, `Échec : ${err.message}`, 'erreur');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-cat-icone]').forEach((sel) => {
+    sel.addEventListener('change', async () => {
+      const id = sel.dataset.catIcone;
+      const cat = categoriesAdmin.find((c) => c.id === id);
+      if (!cat) return;
+      try {
+        await enregistrerCategorie(supabase, { ...cat, icone: sel.value });
+        cat.icone = sel.value;
+        rendreCategoriesAdmin();
+      } catch (err) {
+        retourCategorie(id, `Échec : ${err.message}`, 'erreur');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-cat-toggle]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.catToggle;
+      const cat = categoriesAdmin.find((c) => c.id === id);
+      if (!cat) return;
+      try {
+        await basculerActiveCategorie(supabase, id, !cat.is_active);
+        cat.is_active = !cat.is_active;
+        rendreCategoriesAdmin();
+      } catch (err) {
+        retourCategorie(id, `Échec : ${err.message}`, 'erreur');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-cat-suppr]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.catSuppr;
+      const cat = categoriesAdmin.find((c) => c.id === id);
+      if (!cat) return;
+      const nbSubs = sousCategoriesDe(id).length;
+      if (!confirm(`Supprimer la catégorie « ${cat.nom} »${nbSubs ? ` et ses ${nbSubs} sous-catégorie(s)` : ''} ?\n\nLes signalements déjà envoyés dans cette catégorie ne sont pas supprimés, mais perdront leur classification.`)) return;
+      try {
+        await supprimerCategorie(supabase, id);
+        await rafraichirEtRerendre();
+      } catch (err) {
+        alert(`Suppression impossible : ${err.message}`);
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-cat-monter]').forEach((btn) => {
+    btn.addEventListener('click', () => deplacerCategorie(btn.dataset.catMonter, -1));
+  });
+  document.querySelectorAll('[data-cat-descendre]').forEach((btn) => {
+    btn.addEventListener('click', () => deplacerCategorie(btn.dataset.catDescendre, 1));
+  });
+
+  // ---- Sous-catégories ----
+  document.querySelectorAll('[data-sub-nom]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const id = input.dataset.subNom;
+      const sub = sousCategoriesAdmin.find((s) => s.id === id);
+      if (!sub || !input.value.trim()) return;
+      try {
+        await enregistrerSousCategorie(supabase, { ...sub, nom: input.value.trim() });
+        sub.nom = input.value.trim();
+        retourCategorie(sub.category_id, 'Sous-catégorie mise à jour', 'succes');
+      } catch (err) {
+        retourCategorie(sub.category_id, `Échec : ${err.message}`, 'erreur');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-sub-service]').forEach((sel) => {
+    sel.addEventListener('change', async () => {
+      const id = sel.dataset.subService;
+      const sub = sousCategoriesAdmin.find((s) => s.id === id);
+      if (!sub) return;
+      try {
+        await enregistrerSousCategorie(supabase, { ...sub, service_id: sel.value || null });
+        sub.service_id = sel.value || null;
+        retourCategorie(sub.category_id, 'Service assigné', 'succes');
+      } catch (err) {
+        retourCategorie(sub.category_id, `Échec : ${err.message}`, 'erreur');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-sub-priorite]').forEach((sel) => {
+    sel.addEventListener('change', async () => {
+      const id = sel.dataset.subPriorite;
+      const sub = sousCategoriesAdmin.find((s) => s.id === id);
+      if (!sub) return;
+      try {
+        await enregistrerSousCategorie(supabase, { ...sub, priorite_defaut: sel.value });
+        sub.priorite_defaut = sel.value;
+        retourCategorie(sub.category_id, 'Priorité par défaut mise à jour', 'succes');
+      } catch (err) {
+        retourCategorie(sub.category_id, `Échec : ${err.message}`, 'erreur');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-sub-delai]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const id = input.dataset.subDelai;
+      const sub = sousCategoriesAdmin.find((s) => s.id === id);
+      if (!sub) return;
+      const valeur = input.value === '' ? null : parseInt(input.value, 10);
+      try {
+        await enregistrerSousCategorie(supabase, { ...sub, delai_indicatif_jours: valeur });
+        sub.delai_indicatif_jours = valeur;
+        retourCategorie(sub.category_id, 'Délai mis à jour', 'succes');
+      } catch (err) {
+        retourCategorie(sub.category_id, `Échec : ${err.message}`, 'erreur');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-sub-toggle]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.subToggle;
+      const sub = sousCategoriesAdmin.find((s) => s.id === id);
+      if (!sub) return;
+      try {
+        await basculerActiveSousCategorie(supabase, id, !sub.is_active);
+        sub.is_active = !sub.is_active;
+        rendreCategoriesAdmin();
+      } catch (err) {
+        retourCategorie(sub.category_id, `Échec : ${err.message}`, 'erreur');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-sub-suppr]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.subSuppr;
+      const sub = sousCategoriesAdmin.find((s) => s.id === id);
+      if (!sub) return;
+      if (!confirm(`Supprimer la sous-catégorie « ${sub.nom} » ?\n\nLes signalements déjà envoyés avec ce choix ne sont pas supprimés, mais perdront leur classification.`)) return;
+      try {
+        await supprimerSousCategorie(supabase, id);
+        await rafraichirEtRerendre();
+      } catch (err) {
+        alert(`Suppression impossible : ${err.message}`);
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-sub-monter]').forEach((btn) => {
+    btn.addEventListener('click', () => deplacerSousCategorie(btn.dataset.subMonter, -1));
+  });
+  document.querySelectorAll('[data-sub-descendre]').forEach((btn) => {
+    btn.addEventListener('click', () => deplacerSousCategorie(btn.dataset.subDescendre, 1));
+  });
+
+  document.querySelectorAll('[data-ajouter-sub]').forEach((btn) => {
+    btn.addEventListener('click', () => ajouterSousCategorie(btn.dataset.ajouterSub));
+  });
+}
+
+async function deplacerCategorie(id, direction) {
+  const tri = [...categoriesAdmin].sort((a, b) => a.sort_order - b.sort_order);
+  const index = tri.findIndex((c) => c.id === id);
+  const cible = index + direction;
+  if (index < 0 || cible < 0 || cible >= tri.length) return;
+  [tri[index], tri[cible]] = [tri[cible], tri[index]];
+  try {
+    await reordonner(supabase, 'categories_signalement', tri.map((c) => c.id));
+    await rafraichirEtRerendre();
+  } catch (err) {
+    alert(`Réordonnancement impossible : ${err.message}`);
+  }
+}
+
+async function deplacerSousCategorie(id, direction) {
+  const sub = sousCategoriesAdmin.find((s) => s.id === id);
+  if (!sub) return;
+  const tri = sousCategoriesDe(sub.category_id);
+  const index = tri.findIndex((s) => s.id === id);
+  const cible = index + direction;
+  if (index < 0 || cible < 0 || cible >= tri.length) return;
+  [tri[index], tri[cible]] = [tri[cible], tri[index]];
+  try {
+    await reordonner(supabase, 'sous_categories_signalement', tri.map((s) => s.id));
+    await rafraichirEtRerendre();
+  } catch (err) {
+    alert(`Réordonnancement impossible : ${err.message}`);
+  }
+}
+
+async function ajouterSousCategorie(categoryId) {
+  const nom = prompt('Nom de la nouvelle sous-catégorie :');
+  if (!nom || !nom.trim()) return;
+
+  let id = `${categoryId}-${slugify(nom)}`;
+  let n = 2;
+  while (sousCategoriesAdmin.some((s) => s.id === id)) { id = `${categoryId}-${slugify(nom)}-${n}`; n++; }
+
+  const ordreMax = Math.max(0, ...sousCategoriesDe(categoryId).map((s) => s.sort_order));
+
+  try {
+    await enregistrerSousCategorie(supabase, {
+      id,
+      category_id: categoryId,
+      nom: nom.trim(),
+      priorite_defaut: 'normal',
+      delai_indicatif_jours: 15,
+      service_id: null,
+      sort_order: ordreMax + 1,
+      is_active: true,
+    });
+    await rafraichirEtRerendre();
+  } catch (err) {
+    alert(`Création impossible : ${err.message}`);
+  }
+}
+
+document.getElementById('btn-ajouter-categorie')?.addEventListener('click', async () => {
+  const nom = prompt('Nom de la nouvelle catégorie :');
+  if (!nom || !nom.trim()) return;
+
+  let id = slugify(nom);
+  let n = 2;
+  while (categoriesAdmin.some((c) => c.id === id)) { id = `${slugify(nom)}-${n}`; n++; }
+
+  const ordreMax = Math.max(0, ...categoriesAdmin.map((c) => c.sort_order));
+
+  try {
+    await enregistrerCategorie(supabase, {
+      id, nom: nom.trim(), icone: 'autre', sort_order: ordreMax + 1, is_active: true,
+    });
+    await rafraichirEtRerendre();
+  } catch (err) {
+    alert(`Création impossible : ${err.message}`);
+  }
 });

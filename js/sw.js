@@ -16,7 +16,7 @@
 // service worker : l'activation purge tous les caches portant un
 // autre nom, ce qui évite qu'une ancienne version de l'app
 // continue d'être servie après un déploiement.
-const CACHE_NAME = 'iter-v19';
+const CACHE_NAME = 'iter-v20';
 const ASSETS = [
   './index.html',
   './mentions-legales.html',
@@ -33,6 +33,7 @@ const ASSETS = [
   './js/reinitialisation.js',
   './js/supabase-client.js',
   './js/zone.js',
+  './js/categories.js',
 ];
 
 self.addEventListener('install', (event) => {

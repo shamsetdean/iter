@@ -185,31 +185,53 @@
 <div id="feuille-signalement" role="dialog" aria-label="Signaler">
   <div class="fs-contenu">
     <div class="fs-header">
-      <h2>Signaler</h2>
+      <button id="fs-retour-etape" aria-label="Étape précédente" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <h2 id="fs-titre-etape">Catégorie</h2>
       <button id="fs-close" aria-label="Fermer">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
     </div>
-    <p class="fs-position" id="fs-position">Position en cours d'acquisition…</p>
 
-    <!-- Ordre voulu : on renseigne d'abord la précision et la
-         photo, le choix du type valide et envoie le signalement. -->
-    <div class="fs-commentaire">
-      <label for="fs-note">Précision (facultatif)</label>
-      <input type="text" id="fs-note" maxlength="200" placeholder="Ex. : branche basse sur le trottoir">
+    <!-- Étape 1 : Catégorie -->
+    <div id="fs-etape-categorie" class="fs-etape">
+      <div class="fs-categories" id="fs-liste-categories"></div>
     </div>
 
-    <div class="fs-photo-zone">
-      <input type="file" id="fs-photo" accept="image/*" capture="environment" style="display:none;">
-      <button id="fs-photo-btn" class="fs-photo-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.5"/></svg>
-        <span id="fs-photo-libelle">Ajouter une photo</span>
-      </button>
-      <div id="fs-photo-apercu" class="fs-photo-apercu"></div>
+    <!-- Étape 2 : Sous-catégorie -->
+    <div id="fs-etape-sous-categorie" class="fs-etape" style="display:none;">
+      <div class="fs-sous-categories" id="fs-liste-sous-categories"></div>
     </div>
 
-    <p class="fs-choix-type">Choisissez le type pour envoyer</p>
-    <div class="fs-types" id="fs-types"></div>
+    <!-- Étape 3 : Photo -->
+    <div id="fs-etape-photo" class="fs-etape" style="display:none;">
+      <div class="fs-photo-zone">
+        <input type="file" id="fs-photo" accept="image/*" capture="environment" style="display:none;">
+        <button id="fs-photo-btn" class="fs-photo-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          <span id="fs-photo-libelle">Ajouter une photo</span>
+        </button>
+        <div id="fs-photo-apercu" class="fs-photo-apercu"></div>
+      </div>
+      <button class="btn-primary" id="fs-photo-suivant">Continuer</button>
+      <button class="btn-link" id="fs-photo-passer">Passer cette étape</button>
+    </div>
+
+    <!-- Étape 4 : Localisation -->
+    <div id="fs-etape-localisation" class="fs-etape" style="display:none;">
+      <p class="fs-position" id="fs-position">Position en cours d'acquisition…</p>
+      <button class="btn-primary" id="fs-position-suivant">Continuer</button>
+    </div>
+
+    <!-- Étape 5 : Description + envoi -->
+    <div id="fs-etape-description" class="fs-etape" style="display:none;">
+      <div class="fs-commentaire">
+        <label for="fs-note">Précision (facultatif)</label>
+        <input type="text" id="fs-note" maxlength="200" placeholder="Ex. : branche basse sur le trottoir">
+      </div>
+      <button class="btn-primary" id="fs-envoyer">Envoyer le signalement</button>
+    </div>
 
     <p class="fs-retour" id="fs-retour"></p>
   </div>

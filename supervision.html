@@ -152,6 +152,46 @@
 
   .etat { text-align: center; padding: 50px 20px; color: var(--ink-dim); font-size: 14px; line-height: 1.6; }
 
+  /* Catégories & sous-catégories */
+  .cat-carte {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 15px 17px; margin-bottom: 11px;
+  }
+  .cat-carte.inactive { opacity: 0.5; }
+  .cat-entete { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cat-icone-apercu { display: flex; align-items: center; flex-shrink: 0; }
+  .cat-fleche {
+    width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
+    font-size: 9px; color: var(--ink-dim);
+    border: 1px solid var(--border); background: rgba(255,255,255,0.03);
+  }
+  .cat-fleche:disabled { opacity: 0.25; }
+  .cat-nom, .cat-sub-nom {
+    flex: 1; min-width: 120px; padding: 7px 10px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--border); background: var(--bg-elevated); color: var(--ink);
+  }
+  .cat-entete select, .cat-sub-ligne select, .cat-sub-delai {
+    padding: 7px 8px; border-radius: 8px; font-size: 11px;
+    border: 1px solid var(--border); background: var(--bg-elevated); color: var(--ink);
+  }
+  .cat-sub-delai { width: 62px; }
+  .cat-toggle {
+    padding: 6px 11px; border-radius: 20px; font-size: 11px; font-weight: 700;
+    border: 1px solid var(--border); background: rgba(255,255,255,0.02); color: var(--ink-dim); flex-shrink: 0;
+  }
+  .cat-toggle.actif { color: #06121a; background: var(--green); border-color: var(--green); }
+  .cat-suppr {
+    width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+    color: var(--danger); border: 1px solid var(--border); background: rgba(239,83,80,0.08);
+  }
+  .cat-sous-liste { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 7px; }
+  .cat-sub-ligne { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .cat-sub-ligne.inactive { opacity: 0.5; }
+  .cat-ajouter-sub { margin-top: 10px; }
+  .cat-retour { display: block; font-size: 11px; margin-top: 8px; min-height: 14px; }
+  .cat-retour.succes { color: var(--green); }
+  .cat-retour.erreur { color: var(--danger); }
+
   /* Journal d'activité */
   #liste-journal { max-height: 340px; overflow-y: auto; }
   .jr-ligne {
@@ -284,37 +324,48 @@
   <div class="bloc-titre">
     <h2>Signalements</h2>
     <div class="filtres" id="filtres-signalements">
-      <button class="f-sig active" data-statut="ouvert">Ouverts</button>
+      <button class="f-sig active" data-statut="actifs">En cours</button>
       <button class="f-sig" data-statut="tous">Tous</button>
-      <button class="f-sig" data-statut="traite">Traités</button>
+      <button class="f-sig" data-statut="clos">Clos</button>
     </div>
   </div>
   <div id="liste-signalements" class="etat">Chargement…</div>
 
-  <div class="bloc-titre">
-    <h2>Comptes et droits</h2>
-    <button id="btn-ajouter-compte" class="bt-action">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-      Autoriser une adresse
-    </button>
-  </div>
-  <div id="liste-comptes" class="etat">Chargement…</div>
-
-  <div class="bloc-titre">
-    <h2>Journal d'activité</h2>
-    <div class="filtres" id="filtres-journal">
-      <button class="f-journal active" data-action="tous">Tout</button>
-      <button class="f-journal" data-action="creation">Créations</button>
-      <button class="f-journal" data-action="traitement">Traitements</button>
-      <button class="f-journal" data-action="modification">Modifications</button>
-      <button class="f-journal" data-action="suppression">Suppressions</button>
-      <button id="btn-export-journal" class="bt-action">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
-        Exporter
+  <div id="zone-admin-complet" style="display:none;">
+    <div class="bloc-titre">
+      <h2>Catégories de signalement</h2>
+      <button id="btn-ajouter-categorie" class="bt-action">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        Ajouter une catégorie
       </button>
     </div>
+    <div id="liste-categories-admin" class="etat">Chargement…</div>
+
+    <div class="bloc-titre">
+      <h2>Comptes et droits</h2>
+      <button id="btn-ajouter-compte" class="bt-action">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        Autoriser une adresse
+      </button>
+    </div>
+    <div id="liste-comptes" class="etat">Chargement…</div>
+
+    <div class="bloc-titre">
+      <h2>Journal d'activité</h2>
+      <div class="filtres" id="filtres-journal">
+        <button class="f-journal active" data-action="tous">Tout</button>
+        <button class="f-journal" data-action="creation">Créations</button>
+        <button class="f-journal" data-action="traitement">Traitements</button>
+        <button class="f-journal" data-action="modification">Modifications</button>
+        <button class="f-journal" data-action="suppression">Suppressions</button>
+        <button id="btn-export-journal" class="bt-action">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+          Exporter
+        </button>
+      </div>
+    </div>
+    <div id="liste-journal" class="etat">Chargement…</div>
   </div>
-  <div id="liste-journal" class="etat">Chargement…</div>
 
   <div class="bloc-titre"><h2>Parcours</h2></div>
   <div id="carte-sup"></div>

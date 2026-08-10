@@ -13,8 +13,9 @@ import {
   creerPastille, habillerPastille,
 } from './profil.js';
 import {
-  TYPES_SIGNALEMENT,
-  svgSignalement,
+  chargerCategories, chargerSousCategories, svgIcone, LIBELLES_PRIORITE,
+} from './categories.js';
+import {
   creerSignalement,
   chargerSignalements,
   creerMarqueurSignalement,
@@ -555,9 +556,12 @@ function startLiveLocationWatch() {
 document.getElementById('btn-logout')?.addEventListener('click', () => signOut());
 
 // ------------------------------------------------------------
-// SIGNALEMENTS terrain
+// SIGNALEMENTS terrain — assistant en 4 étapes :
+// Catégorie → Sous-catégorie → Photo → Localisation → Description
 // ------------------------------------------------------------
 const feuilleSignalement = document.getElementById('feuille-signalement');
+const fsTitreEtape = document.getElementById('fs-titre-etape');
+const fsBoutonRetourEtape = document.getElementById('fs-retour-etape');
 const fsPosition = document.getElementById('fs-position');
 const fsRetour = document.getElementById('fs-retour');
 const fsNote = document.getElementById('fs-note');
@@ -565,41 +569,139 @@ const fsPhotoInput = document.getElementById('fs-photo');
 const fsPhotoBtn = document.getElementById('fs-photo-btn');
 const fsPhotoApercu = document.getElementById('fs-photo-apercu');
 const fsPhotoLibelle = document.getElementById('fs-photo-libelle');
+
 let marqueursSignalements = [];
 let photoSelectionnee = null;
+let categoriesCache = null;
+let sousCategoriesCache = new Map(); // category_id -> liste
 
-// Construction des boutons de type à partir des définitions
-(function construireTypesSignalement() {
-  const conteneur = document.getElementById('fs-types');
-  if (!conteneur) return;
+const ETAPES = ['categorie', 'sous-categorie', 'photo', 'localisation', 'description'];
+const TITRES_ETAPE = {
+  categorie: 'Catégorie',
+  'sous-categorie': 'Précisez',
+  photo: 'Photo',
+  localisation: 'Position',
+  description: 'Description',
+};
 
-  conteneur.innerHTML = Object.entries(TYPES_SIGNALEMENT)
-    .map(
-      ([cle, def]) => `
-      <button class="fs-type" data-type="${cle}">
-        <span class="rond" style="background:${def.couleur}">${svgSignalement(cle, 22, '#0a0e1a')}</span>
-        <span class="nom">${def.libelle}</span>
-      </button>`
-    )
-    .join('');
+let etatSignalement = {
+  etapeIndex: 0,
+  categorie: null,      // { id, nom, icone }
+  sousCategorie: null,  // { id, nom, priorite_defaut }
+};
 
-  conteneur.querySelectorAll('.fs-type').forEach((btn) => {
-    btn.addEventListener('click', () => envoyerSignalement(btn.dataset.type, btn));
-  });
-})();
-
-function ouvrirFeuilleSignalement() {
-  if (fsRetour) {
-    fsRetour.textContent = '';
-    fsRetour.className = 'fs-retour';
-  }
-  if (fsNote) fsNote.value = '';
-  retirerPhoto();
-  majPositionSignalement();
-  feuilleSignalement?.classList.add('visible');
+function etapeCourante() {
+  return ETAPES[etatSignalement.etapeIndex];
 }
 
-// ---- Photo ----
+function afficherEtape(nomEtape) {
+  ETAPES.forEach((e) => {
+    const el = document.getElementById(`fs-etape-${e}`);
+    if (el) el.style.display = e === nomEtape ? 'block' : 'none';
+  });
+  if (fsTitreEtape) fsTitreEtape.textContent = TITRES_ETAPE[nomEtape] || '';
+  if (fsBoutonRetourEtape) {
+    fsBoutonRetourEtape.style.display = etatSignalement.etapeIndex > 0 ? 'flex' : 'none';
+  }
+  if (fsRetour) { fsRetour.textContent = ''; fsRetour.className = 'fs-retour'; }
+}
+
+function allerEtape(index) {
+  etatSignalement.etapeIndex = Math.max(0, Math.min(index, ETAPES.length - 1));
+  const nom = etapeCourante();
+  afficherEtape(nom);
+  if (nom === 'localisation') majPositionSignalement();
+}
+
+function etapeSuivante() { allerEtape(etatSignalement.etapeIndex + 1); }
+
+fsBoutonRetourEtape?.addEventListener('click', () => allerEtape(etatSignalement.etapeIndex - 1));
+
+async function ouvrirFeuilleSignalement() {
+  etatSignalement = { etapeIndex: 0, categorie: null, sousCategorie: null };
+  if (fsNote) fsNote.value = '';
+  retirerPhoto();
+  feuilleSignalement?.classList.add('visible');
+  allerEtape(0);
+  await chargerEtAfficherCategories();
+}
+
+// ---- Étape 1 : Catégorie ----
+async function chargerEtAfficherCategories() {
+  const conteneur = document.getElementById('fs-liste-categories');
+  if (!conteneur) return;
+  conteneur.innerHTML = '<div class="fs-chargement">Chargement…</div>';
+
+  if (!categoriesCache) categoriesCache = await chargerCategories(supabase);
+
+  if (categoriesCache.length === 0) {
+    conteneur.innerHTML = '<div class="fs-chargement">Aucune catégorie disponible.</div>';
+    return;
+  }
+
+  conteneur.innerHTML = categoriesCache
+    .map((c) => `
+      <button class="fs-cat-carte" data-cat="${c.id}">
+        <span class="fs-cat-icone">${svgIcone(c.icone, 26, '#0a0e1a')}</span>
+        <span class="fs-cat-nom">${c.nom}</span>
+      </button>`)
+    .join('');
+
+  conteneur.querySelectorAll('.fs-cat-carte').forEach((btn) => {
+    btn.addEventListener('click', () => choisirCategorie(btn.dataset.cat));
+  });
+}
+
+async function choisirCategorie(categoryId) {
+  const cat = categoriesCache.find((c) => c.id === categoryId);
+  if (!cat) return;
+  etatSignalement.categorie = cat;
+  etatSignalement.sousCategorie = null;
+  etapeSuivante();
+  await chargerEtAfficherSousCategories(categoryId);
+}
+
+// ---- Étape 2 : Sous-catégorie ----
+async function chargerEtAfficherSousCategories(categoryId) {
+  const conteneur = document.getElementById('fs-liste-sous-categories');
+  if (!conteneur) return;
+  conteneur.innerHTML = '<div class="fs-chargement">Chargement…</div>';
+
+  if (!sousCategoriesCache.has(categoryId)) {
+    sousCategoriesCache.set(categoryId, await chargerSousCategories(supabase, categoryId));
+  }
+  const liste = sousCategoriesCache.get(categoryId);
+
+  if (liste.length === 0) {
+    conteneur.innerHTML = '<div class="fs-chargement">Aucune sous-catégorie disponible.</div>';
+    return;
+  }
+
+  conteneur.innerHTML = liste
+    .map((sc) => {
+      const prio = LIBELLES_PRIORITE[sc.priorite_defaut] || LIBELLES_PRIORITE.normal;
+      return `
+      <button class="fs-souscat-ligne" data-souscat="${sc.id}">
+        <span class="fs-souscat-nom">${sc.nom}</span>
+        <span class="fs-souscat-prio" title="Priorité ${prio.libelle}">${prio.emoji}</span>
+      </button>`;
+    })
+    .join('');
+
+  conteneur.querySelectorAll('.fs-souscat-ligne').forEach((btn) => {
+    btn.addEventListener('click', () => choisirSousCategorie(btn.dataset.souscat));
+  });
+}
+
+function choisirSousCategorie(sousCategorieId) {
+  const liste = sousCategoriesCache.get(etatSignalement.categorie.id) || [];
+  const sc = liste.find((s) => s.id === sousCategorieId);
+  if (!sc) return;
+  etatSignalement.sousCategorie = sc;
+  etapeSuivante();
+}
+
+// ---- Étape 3 : Photo ----
 function retirerPhoto() {
   photoSelectionnee = null;
   if (fsPhotoInput) fsPhotoInput.value = '';
@@ -636,6 +738,10 @@ fsPhotoInput?.addEventListener('change', (e) => {
   }
 });
 
+document.getElementById('fs-photo-suivant')?.addEventListener('click', etapeSuivante);
+document.getElementById('fs-photo-passer')?.addEventListener('click', etapeSuivante);
+
+// ---- Étape 4 : Localisation ----
 function majPositionSignalement() {
   if (!fsPosition) return;
   if (dernierePosition) {
@@ -648,13 +754,32 @@ function majPositionSignalement() {
   }
 }
 
+document.getElementById('fs-position-suivant')?.addEventListener('click', () => {
+  if (!dernierePosition) {
+    majPositionSignalement();
+    return;
+  }
+  etapeSuivante();
+});
+
+// ---- Étape 5 : Description + envoi ----
 document.getElementById('btn-signaler')?.addEventListener('click', ouvrirFeuilleSignalement);
 document.getElementById('fs-close')?.addEventListener('click', () => feuilleSignalement?.classList.remove('visible'));
 feuilleSignalement?.addEventListener('click', (e) => {
   if (e.target === feuilleSignalement) feuilleSignalement.classList.remove('visible');
 });
 
-async function envoyerSignalement(type, bouton) {
+document.getElementById('fs-envoyer')?.addEventListener('click', envoyerSignalement);
+
+async function envoyerSignalement() {
+  const bouton = document.getElementById('fs-envoyer');
+  if (!etatSignalement.sousCategorie) {
+    if (fsRetour) {
+      fsRetour.textContent = 'Choisissez une catégorie et une sous-catégorie.';
+      fsRetour.className = 'fs-retour erreur';
+    }
+    return;
+  }
   if (!dernierePosition) {
     if (fsRetour) {
       fsRetour.textContent = "Position GPS indisponible. Attendez l'acquisition du signal, puis réessayez.";
@@ -670,23 +795,24 @@ async function envoyerSignalement(type, bouton) {
     return;
   }
 
-  // Verrouillage : évite les doubles envois pendant l'appel réseau
-  document.querySelectorAll('.fs-type').forEach((b) => (b.disabled = true));
-  if (bouton) bouton.style.opacity = '0.5';
+  if (bouton) { bouton.disabled = true; bouton.textContent = 'Envoi…'; }
 
   try {
     const signalement = await creerSignalement(supabase, session, {
-      type,
+      sousCategorieId: etatSignalement.sousCategorie.id,
+      prioriteDefaut: etatSignalement.sousCategorie.priorite_defaut,
       lat: dernierePosition.lat,
       lng: dernierePosition.lng,
       commentaire: fsNote?.value.trim() || null,
-      // Le rattachement au parcours se fait après coup, à l'arrêt
-      // de l'enregistrement (l'identifiant n'existe pas encore ici).
-      parcoursId: null,
     });
 
-    // Photo envoyée après création : le nom du fichier reprend
-    // l'identifiant du signalement, qui n'existe qu'à ce moment.
+    // Enrichi avec ce qu'on connaît déjà du choix fait dans
+    // l'assistant, pour afficher le marqueur immédiatement sans
+    // requête supplémentaire vers vue_signalements.
+    signalement.categorie_nom = etatSignalement.categorie.nom;
+    signalement.categorie_icone = etatSignalement.categorie.icone;
+    signalement.sous_categorie_nom = etatSignalement.sousCategorie.nom;
+
     if (photoSelectionnee) {
       if (fsRetour) {
         fsRetour.textContent = 'Envoi de la photo…';
@@ -701,8 +827,6 @@ async function envoyerSignalement(type, bouton) {
           fsRetour.className = 'fs-retour erreur';
         }
         ajouterMarqueurSignalement(signalement);
-        retirerPhoto();
-        if (fsNote) fsNote.value = '';
         return;
       }
     }
@@ -710,11 +834,9 @@ async function envoyerSignalement(type, bouton) {
     ajouterMarqueurSignalement(signalement);
 
     if (fsRetour) {
-      fsRetour.textContent = `${TYPES_SIGNALEMENT[type].libelle} signalé à votre position.`;
+      fsRetour.textContent = `${etatSignalement.sousCategorie.nom} signalé à votre position.`;
       fsRetour.className = 'fs-retour succes';
     }
-    if (fsNote) fsNote.value = '';
-    retirerPhoto();
 
     setTimeout(() => feuilleSignalement?.classList.remove('visible'), 900);
   } catch (err) {
@@ -724,8 +846,7 @@ async function envoyerSignalement(type, bouton) {
       fsRetour.className = 'fs-retour erreur';
     }
   } finally {
-    document.querySelectorAll('.fs-type').forEach((b) => (b.disabled = false));
-    if (bouton) bouton.style.opacity = '';
+    if (bouton) { bouton.disabled = false; bouton.textContent = 'Envoyer le signalement'; }
   }
 }
 
@@ -768,8 +889,7 @@ async function traiterSignalement(signalement, statut, marqueur) {
 }
 
 async function effacerSignalement(signalement, marqueur) {
-  const def = TYPES_SIGNALEMENT[signalement.type];
-  const libelle = def ? def.libelle : signalement.type;
+  const libelle = signalement.sous_categorie_nom || signalement.categorie_nom || 'ce signalement';
   if (!confirm(`Supprimer ce signalement « ${libelle} » ?`)) return;
 
   try {

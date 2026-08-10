@@ -6,49 +6,12 @@
 // ============================================================
 
 // ============================================================
-// SIGNALEMENTS terrain — travaux, déchets, élagage, danger,
-// signalétique. Posés à la position GPS courante, rattachés au
-// parcours en cours s'il y en a un.
+// SIGNALEMENTS terrain — classés par catégorie → sous-catégorie
+// (voir categories.js pour la taxonomie), posés à la position
+// GPS courante.
 // ============================================================
 
-export const TYPES_SIGNALEMENT = {
-  travaux: {
-    libelle: 'Travaux',
-    couleur: '#f5a623',
-    // Cône de chantier
-    icone: '<path d="M9.3 6.2h5.4M7.5 12h9M3 20h18M6 20 12 3l6 17"/>',
-  },
-  dechet: {
-    libelle: 'Déchet',
-    couleur: '#8b6f47',
-    // Corbeille
-    icone: '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14ZM10 11v6M14 11v6"/>',
-  },
-  elagage: {
-    libelle: 'Élagage',
-    couleur: '#3ddc97',
-    // Arbre
-    icone: '<path d="M12 22v-6M9 16h6M12 16c-3.9 0-7-2.7-7-6a5.6 5.6 0 0 1 2.6-4.7A5.3 5.3 0 0 1 12 2a5.3 5.3 0 0 1 4.4 3.3A5.6 5.6 0 0 1 19 10c0 3.3-3.1 6-7 6Z"/>',
-  },
-  danger: {
-    libelle: 'Danger',
-    couleur: '#ef5350',
-    // Triangle d'alerte
-    icone: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0ZM12 9v4M12 17h.01"/>',
-  },
-  signaletique: {
-    libelle: 'Signalétique',
-    couleur: '#3fb6f5',
-    // Panneau
-    icone: '<path d="M12 13v9M12 2v3M5 5h11l3 4-3 4H5V5Z"/>',
-  },
-};
-
-export function svgSignalement(type, taille = 20, couleurTrait = 'currentColor') {
-  const def = TYPES_SIGNALEMENT[type];
-  if (!def) return '';
-  return `<svg viewBox="0 0 24 24" width="${taille}" height="${taille}" fill="none" stroke="${couleurTrait}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${def.icone}</svg>`;
-}
+import { svgIcone, LIBELLES_PRIORITE, LIBELLES_STATUT } from './categories.js';
 
 // ------------------------------------------------------------
 // Photos
@@ -131,17 +94,18 @@ export async function urlPhoto(supabase, chemin) {
 // ------------------------------------------------------------
 // Enregistrement
 // ------------------------------------------------------------
-export async function creerSignalement(supabase, session, { type, lat, lng, commentaire, parcoursId }) {
+export async function creerSignalement(supabase, session, { sousCategorieId, prioriteDefaut, lat, lng, commentaire }) {
   if (!session) throw new Error('Connexion requise pour signaler.');
-  if (!TYPES_SIGNALEMENT[type]) throw new Error(`Type de signalement inconnu : ${type}`);
+  if (!sousCategorieId) throw new Error('Sous-catégorie manquante.');
   if (lat == null || lng == null) throw new Error('Position indisponible.');
 
   const { data, error } = await supabase
     .from('signalements')
     .insert({
       user_id: session.user.id,
-      parcours_id: parcoursId || null,
-      type,
+      sous_categorie_id: sousCategorieId,
+      priorite: prioriteDefaut || 'normal',
+      statut: 'nouveau',
       lat,
       lng,
       commentaire: commentaire || null,
@@ -153,8 +117,12 @@ export async function creerSignalement(supabase, session, { type, lat, lng, comm
   return data;
 }
 
+// Lit depuis vue_signalements : la vue joint déjà catégorie,
+// sous-catégorie et service (évite 3 requêtes séparées par
+// affichage). La vue hérite des mêmes policies RLS que la table
+// "signalements" (security_invoker) : rien de plus n'est exposé.
 export async function chargerSignalements(supabase, { userId = null, statut = null } = {}) {
-  let requete = supabase.from('signalements').select('*').order('created_at', { ascending: false });
+  let requete = supabase.from('vue_signalements').select('*').order('created_at', { ascending: false });
   if (userId) requete = requete.eq('user_id', userId);
   if (statut) requete = requete.eq('statut', statut);
 
@@ -168,7 +136,7 @@ export async function chargerSignalements(supabase, { userId = null, statut = nu
 
 export async function changerStatutSignalement(supabase, session, id, statut) {
   const maj = { statut };
-  if (statut === 'traite') {
+  if (statut === 'resolu' || statut === 'cloture') {
     maj.traite_at = new Date().toISOString();
     maj.traite_par = session ? session.user.id : null;
   } else {
@@ -176,6 +144,11 @@ export async function changerStatutSignalement(supabase, session, id, statut) {
     maj.traite_par = null;
   }
   const { error } = await supabase.from('signalements').update(maj).eq('id', id);
+  if (error) throw error;
+}
+
+export async function changerPrioriteSignalement(supabase, id, priorite) {
+  const { error } = await supabase.from('signalements').update({ priorite }).eq('id', id);
   if (error) throw error;
 }
 
@@ -196,7 +169,13 @@ export async function supprimerSignalement(supabase, id, cheminPhoto = null) {
 
 // ------------------------------------------------------------
 // Affichage sur la carte
+//
+// Icône = catégorie (identification visuelle immédiate).
+// Couleur du marqueur = priorité (urgence visible d'un coup
+// d'œil), conformément aux 4 niveaux 🔴🟠🟡🟢.
 // ------------------------------------------------------------
+const STATUTS_CLOS = ['resolu', 'cloture', 'non_recevable'];
+
 export function creerMarqueurSignalement(signalement, options = {}) {
   const {
     auteur = null,
@@ -207,31 +186,34 @@ export function creerMarqueurSignalement(signalement, options = {}) {
     peutTraiter = false,
   } = options;
 
-  const def = TYPES_SIGNALEMENT[signalement.type];
-  if (!def) return null;
+  const priorite = LIBELLES_PRIORITE[signalement.priorite] || LIBELLES_PRIORITE.normal;
+  const icone = signalement.categorie_icone || 'autre';
+  const nomAffiche = signalement.sous_categorie_nom || signalement.categorie_nom || 'Signalement';
 
   const el = document.createElement('div');
   el.className = 'marqueur-signalement';
-  if (signalement.statut === 'traite') el.classList.add('traite');
-  el.style.background = def.couleur;
-  el.innerHTML = svgSignalement(signalement.type, 16, '#0a0e1a');
-  el.title = def.libelle;
+  const clos = STATUTS_CLOS.includes(signalement.statut);
+  if (clos) el.classList.add('traite');
+  el.style.background = priorite.couleur;
+  el.innerHTML = svgIcone(icone, 16, '#0a0e1a');
+  el.title = nomAffiche;
 
   const date = new Date(signalement.created_at).toLocaleString('fr-FR', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
   });
 
-  const traite = signalement.statut === 'traite';
-
   const contenu = document.createElement('div');
   contenu.className = 'popup-signalement';
   contenu.innerHTML = `
-    <div class="ps-titre" style="color:${def.couleur}">${def.libelle}</div>
-    <div class="ps-meta">${auteur ? auteur + ' · ' : ''}${date}</div>
+    <div class="ps-titre" style="color:${priorite.couleur}">${priorite.emoji} ${nomAffiche}</div>
+    <div class="ps-meta">${signalement.categorie_nom || ''}${signalement.categorie_nom ? ' · ' : ''}${auteur ? auteur + ' · ' : ''}${date}</div>
     ${signalement.commentaire ? `<div class="ps-note">« ${signalement.commentaire} »</div>` : ''}
-    ${traite ? '<div class="ps-statut">Traité</div>' : ''}
+    <div class="ps-statut">${LIBELLES_STATUT[signalement.statut] || signalement.statut}</div>
     <div class="ps-photo" data-photo></div>
-    ${peutTraiter ? `<button class="ps-traiter" data-traiter>${traite ? 'Rouvrir' : 'Marquer comme traité'}</button>` : ''}
+    ${peutTraiter ? `
+      <select class="ps-statut-select" data-statut-select>
+        ${Object.entries(LIBELLES_STATUT).map(([v, l]) => `<option value="${v}" ${signalement.statut === v ? 'selected' : ''}>${l}</option>`).join('')}
+      </select>` : ''}
     ${peutSupprimer ? '<button class="ps-supprimer" data-supprimer>Supprimer</button>' : ''}
   `;
 
@@ -242,7 +224,7 @@ export function creerMarqueurSignalement(signalement, options = {}) {
       if (!url || !zone) return;
       const img = document.createElement('img');
       img.src = url;
-      img.alt = `Photo du signalement ${def.libelle}`;
+      img.alt = `Photo du signalement ${nomAffiche}`;
       img.loading = 'lazy';
       img.addEventListener('click', () => window.open(url, '_blank', 'noopener'));
       zone.appendChild(img);
@@ -250,8 +232,8 @@ export function creerMarqueurSignalement(signalement, options = {}) {
   }
 
   if (peutTraiter && surTraitement) {
-    contenu.querySelector('[data-traiter]')?.addEventListener('click', () => {
-      surTraitement(signalement, traite ? 'ouvert' : 'traite');
+    contenu.querySelector('[data-statut-select]')?.addEventListener('change', (e) => {
+      surTraitement(signalement, e.target.value);
     });
   }
 
