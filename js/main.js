@@ -6,19 +6,12 @@
 // ============================================================
 
 import { supabase, getSession, signIn, signUp, signOut, onAuthChange, envoyerLienReinitialisation } from './supabase-client.js';
-import { initMap, setupTraceLayer, pushPointToTrace, createUserMarker, updateUserMarker, followUser, drawFullTrace, changeMapStyle, STYLES, calculerBounds, appliquerMasqueZone } from './map.js';
+import { initMap, createUserMarker, updateUserMarker, followUser, changeMapStyle, STYLES, calculerBounds, appliquerMasqueZone } from './map.js';
 import { chargerZoneUtilisateur, chargerContourZone } from './zone.js';
-import { SessionTracking, distanceM } from './tracking.js';
-import { getPrixEnergie, calculerCoutTrajet, calculerConsommation, LIBELLES_ENERGIE } from './cout.js';
-import { exportGPX, exportCSV } from './export.js';
-import { readImportedFile } from './import.js';
-import { rattacherEtComparer } from './itineraires.js';
-import { getTemperature } from './meteo.js';
 import {
   envoyerAvatar, retirerAvatar, urlAvatar, chargerIdentites,
   creerPastille, habillerPastille,
 } from './profil.js';
-import { partagerParcoursAvecVisuel } from './partage-visuel.js';
 import {
   TYPES_SIGNALEMENT,
   svgSignalement,
@@ -32,32 +25,6 @@ import {
 
 let map = null;
 let session = null;
-let tracking = null;
-let currentType = 'pied';
-
-// ------------------------------------------------------------
-// Formatage
-// ------------------------------------------------------------
-function formatDistance(m) {
-  if (m == null) return '—';
-  return m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`;
-}
-
-function formatDuree(s) {
-  if (s == null) return '—';
-  const h = Math.floor(s / 3600);
-  const min = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  if (h > 0) return `${h}h${String(min).padStart(2, '0')}`;
-  return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-}
-
-function formatAllure(secParKm) {
-  if (secParKm == null) return '—';
-  const min = Math.floor(secParKm / 60);
-  const sec = secParKm % 60;
-  return `${min}'${String(sec).padStart(2, '0')}"/km`;
-}
 
 // ------------------------------------------------------------
 // Estompage de l'UI en cas d'inactivité (carte + point bleu
@@ -241,25 +208,25 @@ const MAP_STYLE_KEY = 'iter_map_style';
 // n'est qu'un confort : la base refuse de toute façon toute
 // opération non autorisée, quel que soit ce que fait le client.
 // ------------------------------------------------------------
-let profil = null;                    // { role, type_energie, consommation }
-let droits = { pm: {}, te: {} };
+let profil = null;                    // { role, nom, avatar_chemin }
+let droits = { te: {} };
 
-function peut(domaine, droit) {
+function peut(droit) {
   if (profil && profil.role === 'administrateur') return true;
-  return Boolean(droits[domaine] && droits[domaine][droit]);
+  return Boolean(droits.te && droits.te[droit]);
 }
 
 async function chargerProfilEtDroits() {
   if (!session) return;
 
   const [resProfil, resDroits] = await Promise.all([
-    supabase.from('profils').select('role, nom, type_energie, consommation, avatar_chemin').eq('user_id', session.user.id).maybeSingle(),
-    supabase.from('droits').select('domaine, consulter, enregistrer, traiter, modifier, supprimer, type_parcours, acces_historique, acces_dashboard').eq('user_id', session.user.id),
+    supabase.from('profils').select('role, nom, avatar_chemin').eq('user_id', session.user.id).maybeSingle(),
+    supabase.from('droits').select('domaine, consulter, enregistrer, traiter, modifier, supprimer, acces_dashboard')
+      .eq('user_id', session.user.id).eq('domaine', 'te'),
   ]);
 
-  profil = resProfil.data || { role: 'utilisateur', nom: null, type_energie: 'gazole', consommation: 6.5, avatar_chemin: null };
-  droits = { pm: {}, te: {} };
-  (resDroits.data || []).forEach((d) => { droits[d.domaine] = d; });
+  profil = resProfil.data || { role: 'utilisateur', nom: null, avatar_chemin: null };
+  droits = { te: (resDroits.data && resDroits.data[0]) || {} };
 
   appliquerDroitsInterface();
   majPastilleTopbar();
@@ -308,70 +275,25 @@ async function majPhotoPosition() {
   if (coeur) coeur.style.display = 'none';
 }
 
-// Types de parcours autorisés à l'enregistrement. La base refuse
-// de toute façon un type non permis : ce filtrage n'est là que
-// pour ne pas proposer un bouton qui échouerait.
-function typesParcoursAutorises() {
-  if (profil && profil.role === 'administrateur') return ['pied', 'voiture'];
-  const restriction = (droits.pm && droits.pm.type_parcours) || 'tous';
-  return restriction === 'tous' ? ['pied', 'voiture'] : [restriction];
-}
-
 function appliquerDroitsInterface() {
   const estAdmin = profil && profil.role === 'administrateur';
 
-  // Historique : droit explicite, distinct de l'enregistrement.
-  // Collecter des données n'implique pas de pouvoir les relire.
-  const lienHistorique = document.getElementById('lien-historique');
-  if (lienHistorique) {
-    const acces = estAdmin || Boolean(droits.pm && droits.pm.acces_historique);
-    lienHistorique.style.display = acces ? 'flex' : 'none';
-  }
-
-  // Sélecteur pied / voiture, limité aux types autorisés
-  const autorises = typesParcoursAutorises();
-  document.querySelectorAll('.type-choice').forEach((btn) => {
-    const permis = autorises.includes(btn.dataset.type);
-    btn.style.display = permis ? 'flex' : 'none';
-  });
-
-  // Si le type actuellement sélectionné n'est plus permis, on
-  // bascule sur le premier autorisé, sinon l'enregistrement
-  // partirait avec un type que la base rejettera.
-  if (!autorises.includes(currentType) && autorises.length > 0) {
-    currentType = autorises[0];
-    document.querySelectorAll('.type-choice').forEach((b) => {
-      b.classList.toggle('active', b.dataset.type === currentType);
-    });
-  }
-
   // Supervision : ouverte aux administrateurs ET aux comptes ayant
   // le droit explicite « acces_dashboard » (domaine te), distinct
-  // du rôle administrateur complet — cf. acces_historique plus haut.
+  // du rôle administrateur complet.
   const accesDashboard = estAdmin || Boolean(droits.te && droits.te.acces_dashboard);
   const lienSupervision = document.getElementById('lien-supervision');
   if (lienSupervision) lienSupervision.style.display = accesDashboard ? 'flex' : 'none';
 
-  // Import : reste réservé à l'administrateur complet.
-  const btnImport = document.getElementById('btn-import');
-  if (btnImport) btnImport.style.display = estAdmin ? 'flex' : 'none';
-
-  // Chaque bouton flottant n'apparaît que si la personne a le
-  // droit correspondant. Ce n'est qu'un confort : la base refuse
-  // de toute façon une opération non autorisée.
-  const btnGirophare = document.getElementById('btn-girophare');
-  if (btnGirophare) btnGirophare.style.display = peut('pm', 'enregistrer') ? 'flex' : 'none';
-
+  // Le bouton flottant « Signaler » n'apparaît que si la personne
+  // a le droit correspondant. Ce n'est qu'un confort d'affichage :
+  // la base refuse de toute façon une opération non autorisée.
   const btnSignaler = document.getElementById('btn-signaler');
-  if (btnSignaler) btnSignaler.style.display = peut('te', 'enregistrer') ? 'flex' : 'none';
+  const peutSignaler = peut('enregistrer');
+  if (btnSignaler) btnSignaler.style.display = peutSignaler ? 'flex' : 'none';
 
-  // Si aucun des deux, on masque le conteneur pour ne pas laisser
-  // un bloc vide au milieu de l'écran.
   const conteneur = document.getElementById('boutons-flottants');
-  if (conteneur) {
-    const auMoinsUn = peut('pm', 'enregistrer') || peut('te', 'enregistrer');
-    conteneur.style.display = auMoinsUn ? 'flex' : 'none';
-  }
+  if (conteneur) conteneur.style.display = peutSignaler ? 'flex' : 'none';
 }
 
 let contourZoneActive = null; // GeoJSON du contour de la zone en cours, réutilisé après changement de fond
@@ -390,7 +312,6 @@ async function startApp() {
   const stylePref = localStorage.getItem(MAP_STYLE_KEY) || 'standard';
   map = initMap('map', centre, centre ? 14 : undefined, stylePref, bounds);
   map.on('load', () => {
-    setupTraceLayer(map, 'trace-live');
     userMarker = createUserMarker(map);
     userMarker.addTo(map);
     majPhotoPosition();
@@ -478,13 +399,7 @@ document.querySelectorAll('.mp-option').forEach((btn) => {
 });
 
 function reinjecterCouches() {
-  setupTraceLayer(map, 'trace-live');
   if (userMarker) userMarker.addTo(map);
-  if (tracking && tracking.points.length > 1) {
-    drawFullTrace(map, 'trace-live', tracking.points, currentType);
-  } else if (lastParcours && lastParcours.points.length > 1) {
-    drawFullTrace(map, 'trace-live', lastParcours.points, lastParcours.type);
-  }
   if (contourZoneActive) appliquerMasqueZone(map, contourZoneActive);
 }
 
@@ -635,387 +550,9 @@ function startLiveLocationWatch() {
 }
 
 // ------------------------------------------------------------
-// Sélecteur de type de parcours
+// Déconnexion
 // ------------------------------------------------------------
-document.querySelectorAll('.type-choice').forEach((btn) => {
-  btn?.addEventListener('click', () => {
-    document.querySelectorAll('.type-choice').forEach((b) => b.classList.remove('active'));
-    btn?.classList.add('active');
-    currentType = btn.dataset.type;
-  });
-});
-
-// ------------------------------------------------------------
-// Enregistrement
-// ------------------------------------------------------------
-const btnStart = document.getElementById('btn-start');
-const btnPause = document.getElementById('btn-pause');
-const btnStop = document.getElementById('btn-stop');
-const statDistance = document.getElementById('stat-distance');
-const statDuree = document.getElementById('stat-duree');
-const statVitesse = document.getElementById('stat-vitesse');
-const driverAlert = document.getElementById('driver-alert');
-const summaryPanel = document.getElementById('summary-panel');
-
-let statsInterval = null;
-let lastParcours = null; // { titre, type, points, stats } — pour export/partage
-let liveDistanceM = 0;
-
-btnStart?.addEventListener('click', () => {
-  summaryPanel.style.display = 'none';
-  liveDistanceM = 0;
-  statDistance.textContent = '0 m';
-  tracking = new SessionTracking(currentType);
-
-  tracking.onPoint = (point) => {
-    pushPointToTrace(map, 'trace-live', point.lng, point.lat, currentType);
-
-    // Distance cumulée en direct — calcul incrémental entre les deux
-    // derniers points valides (fix : l'ancienne version ne mettait
-    // jamais l'affichage à jour, d'où le "0 m" permanent constaté).
-    const pts = tracking.points;
-    if (pts.length >= 2) {
-      const a = pts[pts.length - 2];
-      const b = pts[pts.length - 1];
-      liveDistanceM += distanceM(a.lat, a.lng, b.lat, b.lng);
-      statDistance.textContent = formatDistance(liveDistanceM);
-    }
-
-    if (point.vitesse_instant != null) {
-      statVitesse.textContent = `${point.vitesse_instant.toFixed(1)} km/h`;
-    }
-  };
-
-  tracking.onVitesse = () => {
-    driverAlert?.classList.add('show');
-  };
-
-  tracking.start();
-
-  document.getElementById('btn-girophare')?.classList.add('enregistre');
-  basculerControles(true);
-
-  statsInterval = setInterval(updateLiveDuree, 1000);
-
-  btnStart.style.display = 'none';
-  btnPause.style.display = 'block';
-  btnStop.style.display = 'block';
-});
-
-btnPause?.addEventListener('click', () => {
-  if (!tracking) return;
-  if (tracking.paused) {
-    tracking.resume();
-    btnPause.textContent = 'Pause';
-  } else {
-    tracking.pause();
-    btnPause.textContent = 'Reprendre';
-  }
-});
-
-let isStopping = false;
-
-btnStop?.addEventListener('click', async () => {
-  if (!tracking || isStopping) return;
-  isStopping = true;
-
-  const activeTracking = tracking;
-  tracking = null; // empêche tout second clic de relancer le flux pendant l'attente réseau
-  clearInterval(statsInterval);
-
-  // Feedback immédiat : le bouton disparaît tout de suite, pas
-  // seulement une fois la sauvegarde terminée
-  btnStart.style.display = 'block';
-  btnPause.style.display = 'none';
-  btnStop.style.display = 'none';
-  btnPause.textContent = 'Pause';
-  document.getElementById('btn-girophare')?.classList.remove('enregistre');
-
-  const stats = activeTracking.stop();
-  const titre = `Parcours du ${new Date(stats.date_debut).toLocaleDateString('fr-FR')}`;
-
-  statDistance.textContent = formatDistance(stats.distance_m);
-
-  const { id: parcoursId, cout_estime_eur, type_energie } = await saveParcours(stats);
-  stats.type_energie = type_energie;
-
-  // Les signalements créés pendant l'enregistrement sont rattachés
-  // au parcours a posteriori : son identifiant n'existe qu'une fois
-  // la ligne insérée en base, donc pas au moment du signalement.
-  if (parcoursId && session) {
-    const { error: errRattache } = await supabase
-      .from('signalements')
-      .update({ parcours_id: parcoursId })
-      .eq('user_id', session.user.id)
-      .is('parcours_id', null)
-      .gte('created_at', stats.date_debut)
-      .lte('created_at', stats.date_fin);
-    if (errRattache) console.warn('Rattachement des signalements impossible :', errRattache);
-  }
-  stats.cout_estime_eur = cout_estime_eur ?? null;
-
-  if (parcoursId && stats.evenements && stats.evenements.length > 0) {
-    const rowsEvenements = stats.evenements.map((e) => ({ ...e, parcours_id: parcoursId }));
-    const { error: errEvenements } = await supabase.from('parcours_evenements').insert(rowsEvenements);
-    if (errEvenements) console.error('Erreur sauvegarde événements:', errEvenements);
-  }
-
-  const meteo = await getTemperature(stats.points[0], stats.date_debut);
-  stats.temperature_c = meteo;
-  if (parcoursId && meteo != null) {
-    await supabase.from('parcours').update({ temperature_c: meteo }).eq('id', parcoursId);
-  }
-
-  lastParcours = { titre, type: currentType, points: stats.points, stats };
-
-  let comparaison = null;
-  if (parcoursId) {
-    const result = await rattacherEtComparer(supabase, session, parcoursId, stats, currentType);
-    comparaison = result.comparaison;
-  }
-
-  renderSummary(stats, comparaison);
-  summaryPanel.style.display = 'block';
-  basculerControles(true);
-
-  isStopping = false;
-});
-
-function updateLiveDuree() {
-  if (!tracking) return;
-  const elapsed = Math.round((Date.now() - tracking.dateDebut) / 1000);
-  statDuree.textContent = formatDuree(elapsed);
-}
-
-// ------------------------------------------------------------
-// Panneau récapitulatif — un maximum d'informations sur le
-// parcours qui vient d'être enregistré, + alternative éventuelle
-// ------------------------------------------------------------
-function renderSummary(stats, comparaison) {
-  const grid = document.getElementById('summary-grid');
-  const items = [
-    ['Distance', formatDistance(stats.distance_m)],
-    ['Durée', formatDuree(stats.duree_s)],
-    ['Vitesse moyenne', stats.vitesse_moy != null ? `${stats.vitesse_moy} km/h` : '—'],
-    ['Vitesse de pointe', stats.vitesse_max != null ? `${stats.vitesse_max} km/h` : '—'],
-  ];
-
-  if (currentType === 'pied') {
-    items.push(['Allure', formatAllure(stats.allure_sec_km)]);
-    items.push(['Calories', stats.calories != null ? `${stats.calories} kcal` : '—']);
-  }
-
-  items.push(
-    ['Dénivelé positif', stats.denivele_positif != null ? `${stats.denivele_positif} m` : '—'],
-    ['Dénivelé négatif', stats.denivele_negatif != null ? `${stats.denivele_negatif} m` : '—'],
-  );
-
-  if (stats.altitude_max != null) {
-    items.push(['Altitude', `${stats.altitude_min}–${stats.altitude_max} m`]);
-  }
-
-  items.push(['Virages', stats.nb_virages != null ? stats.nb_virages : '—']);
-  items.push(['Température', stats.temperature_c != null ? `${stats.temperature_c}°C` : '—']);
-
-  if (stats.evenements && stats.evenements.length > 0) {
-    const nbArrets = stats.evenements.filter((e) => e.type === 'arret').length;
-    const nbRalentissements = stats.evenements.filter((e) => e.type === 'ralentissement').length;
-    const nbAccelerations = stats.evenements.filter((e) => e.type === 'acceleration').length;
-    items.push(['Arrêts', nbArrets]);
-    items.push(['Ralentissements', nbRalentissements]);
-    items.push(['Accélérations', nbAccelerations]);
-  }
-
-  if (currentType === 'voiture') {
-    const energie = stats.type_energie || (profil && profil.type_energie) || 'gazole';
-    const conso = (profil && Number(profil.consommation)) || (energie === 'electrique' ? 18 : 6.5);
-    const quantite = calculerConsommation(stats.distance_m, conso);
-    items.push(['Coût estimé', stats.cout_estime_eur != null ? `${stats.cout_estime_eur} €` : '—']);
-    items.push([
-      energie === 'electrique' ? 'Énergie' : 'Carburant',
-      quantite != null ? `${quantite} ${energie === 'electrique' ? 'kWh' : 'L'}` : '—',
-    ]);
-    items.push(['Véhicule', LIBELLES_ENERGIE[energie] || energie]);
-  }
-
-  grid.innerHTML = items.map(([label, val]) => `
-    <div class="summary-item">
-      <div class="summary-val">${val}</div>
-      <div class="summary-label">${label}</div>
-    </div>
-  `).join('');
-
-  const comparaisonEl = document.getElementById('summary-comparaison');
-  comparaisonEl.style.display = 'block';
-  if (comparaison && comparaison.length > 0) {
-    comparaisonEl?.classList.remove('comparaison-neutre');
-    comparaisonEl.innerHTML = comparaison.map((m) => `<div class="comparaison-line">${m}</div>`).join('');
-  } else {
-    comparaisonEl?.classList.add('comparaison-neutre');
-    comparaisonEl.innerHTML = `<div class="comparaison-line">Pas encore de comparaison possible — c'est le premier trajet enregistré sur cet itinéraire. Reviens-y une prochaine fois pour voir si tu peux faire mieux.</div>`;
-  }
-}
-
-// ------------------------------------------------------------
-// Alerte conducteur : confirmation passager
-// ------------------------------------------------------------
-document.getElementById('alert-confirm-passager')?.addEventListener('click', () => {
-  driverAlert?.classList.remove('show');
-});
-document.getElementById('alert-stop-recording')?.addEventListener('click', () => {
-  driverAlert?.classList.remove('show');
-  btnStop.click();
-});
-
-// ------------------------------------------------------------
-// Sauvegarde Supabase — retourne l'id du parcours + le coût
-// (nécessaires pour le rattachement à un itinéraire et le résumé)
-// ------------------------------------------------------------
-async function saveParcours(stats) {
-  if (!session) return { id: null, cout_estime_eur: null };
-
-  const { data: parcours, error } = await supabase
-    .from('parcours')
-    .insert({
-      user_id: session.user.id,
-      titre: `Parcours du ${new Date(stats.date_debut).toLocaleDateString('fr-FR')}`,
-      type: currentType,
-      date_debut: stats.date_debut,
-      date_fin: stats.date_fin,
-      distance_m: stats.distance_m,
-      duree_s: stats.duree_s,
-      vitesse_moy: stats.vitesse_moy,
-      vitesse_max: stats.vitesse_max,
-      denivele_positif: stats.denivele_positif,
-      denivele_negatif: stats.denivele_negatif,
-      nb_virages: stats.nb_virages,
-      vitesse_min: stats.vitesse_min,
-      altitude_max: stats.altitude_max,
-      altitude_min: stats.altitude_min,
-      allure_sec_km: stats.allure_sec_km,
-      calories: stats.calories,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Erreur sauvegarde parcours:', error);
-    return { id: null, cout_estime_eur: null, type_energie: null };
-  }
-
-  if (stats.points.length > 0) {
-    const rows = stats.points.map((p) => ({ ...p, parcours_id: parcours.id }));
-    const { error: errPoints } = await supabase.from('points_gps').insert(rows);
-    if (errPoints) console.error('Erreur sauvegarde points GPS:', errPoints);
-  }
-
-  // Coût : calculé selon l'énergie réellement utilisée. L'équipe
-  // PM roule en électrique, un prix de carburant liquide donnerait
-  // un montant faux.
-  let cout_estime_eur = null;
-  let type_energie = null;
-  if (currentType === 'voiture') {
-    type_energie = (profil && profil.type_energie) || 'gazole';
-    const conso = (profil && Number(profil.consommation)) || (type_energie === 'electrique' ? 18 : 6.5);
-    const prix = await getPrixEnergie(type_energie);
-    if (prix) {
-      cout_estime_eur = calculerCoutTrajet(stats.distance_m, conso, prix);
-      if (cout_estime_eur != null) {
-        await supabase.from('parcours').update({ cout_estime_eur, type_energie }).eq('id', parcours.id);
-      }
-    }
-  }
-
-  return { id: parcours.id, cout_estime_eur, type_energie };
-}
-
 document.getElementById('btn-logout')?.addEventListener('click', () => signOut());
-
-document.getElementById('summary-close')?.addEventListener('click', () => {
-  summaryPanel.style.display = 'none';
-});
-
-// ------------------------------------------------------------
-// Export
-// ------------------------------------------------------------
-document.getElementById('export-gpx')?.addEventListener('click', () => {
-  if (!lastParcours) return;
-  exportGPX(lastParcours, lastParcours.points);
-});
-
-document.getElementById('export-csv')?.addEventListener('click', () => {
-  if (!lastParcours) return;
-  exportCSV(lastParcours.points);
-});
-
-// ------------------------------------------------------------
-// Partage par SMS
-// ------------------------------------------------------------
-document.getElementById('share-sms')?.addEventListener('click', async () => {
-  if (!lastParcours) return;
-  const s = lastParcours.stats;
-  const texte = [
-    `Mon parcours ${lastParcours.type === 'voiture' ? 'en voiture' : 'à pied'} sur iter :`,
-    `${formatDistance(s.distance_m)} en ${formatDuree(s.duree_s)}`,
-    s.vitesse_moy != null ? `vitesse moyenne ${s.vitesse_moy} km/h` : null,
-  ].filter(Boolean).join(' — ');
-
-  const btn = document.getElementById('share-sms');
-  const texteOriginal = btn?.textContent;
-  btn.textContent = '…';
-  btn.disabled = true;
-
-  // On s'assure que la carte affiche bien le tracé complet avant
-  // capture (le suivi GPS live continue de recentrer sur la
-  // position actuelle après l'arrêt, ce qui décadrerait le partage)
-  setFollowMode(false);
-  drawFullTrace(map, 'trace-live', lastParcours.points, lastParcours.type);
-
-  await partagerParcoursAvecVisuel({
-    points: lastParcours.points,
-    stats: s,
-    type: lastParcours.type,
-    titre: lastParcours.titre,
-    texte,
-    map,
-    evenements: s.evenements,
-  });
-
-  btn.textContent = texteOriginal;
-  btn.disabled = false;
-});
-
-// ------------------------------------------------------------
-// Import d'un parcours (GPX/CSV) pour visualisation sur la carte
-// ------------------------------------------------------------
-const importInput = document.getElementById('import-input');
-
-document.getElementById('btn-import')?.addEventListener('click', () => {
-  importInput.click();
-});
-
-importInput?.addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  try {
-    const points = await readImportedFile(file);
-    if (points.length === 0) throw new Error('Fichier vide ou illisible.');
-
-    drawFullTrace(map, 'trace-import', points, 'pied');
-    setFollowMode(false);
-
-    let distance = 0;
-    for (let i = 1; i < points.length; i++) {
-      distance += distanceM(points[i - 1].lat, points[i - 1].lng, points[i].lat, points[i].lng);
-    }
-    statDistance.textContent = formatDistance(distance);
-  } catch (err) {
-    alert(`Import impossible : ${err.message}`);
-  } finally {
-    importInput.value = '';
-  }
-});
 
 // ------------------------------------------------------------
 // SIGNALEMENTS terrain
@@ -1111,35 +648,6 @@ function majPositionSignalement() {
   }
 }
 
-// ------------------------------------------------------------
-// Panneau d'enregistrement, replié derrière le girophare
-// ------------------------------------------------------------
-const panneauControles = document.getElementById('controls');
-
-function basculerControles(forcer = null) {
-  if (!panneauControles) return;
-
-  // Le résumé de fin de parcours est imbriqué dans ce panneau :
-  // le replier le ferait disparaître avant que la personne ait pu
-  // exporter ou partager. On l'en empêche tant qu'il est affiché.
-  const resumeAffiche = summaryPanel && summaryPanel.style.display === 'block';
-  if (forcer === false && resumeAffiche) return;
-  if (forcer === null && resumeAffiche && panneauControles.classList.contains('visible')) return;
-
-  const ouvrir = forcer !== null ? forcer : !panneauControles.classList.contains('visible');
-  panneauControles.classList.toggle('visible', ouvrir);
-}
-
-document.getElementById('btn-girophare')?.addEventListener('click', () => {
-  // Pendant un enregistrement, le panneau reste ouvert : on ne
-  // referme pas par mégarde les commandes de pause et d'arrêt.
-  if (tracking) {
-    basculerControles(true);
-    return;
-  }
-  basculerControles();
-});
-
 document.getElementById('btn-signaler')?.addEventListener('click', ouvrirFeuilleSignalement);
 document.getElementById('fs-close')?.addEventListener('click', () => feuilleSignalement?.classList.remove('visible'));
 feuilleSignalement?.addEventListener('click', (e) => {
@@ -1230,13 +738,13 @@ function ajouterMarqueurSignalement(signalement) {
   // Le droit « supprimer » ne vaut que pour ses PROPRES signalements.
   // Un administrateur complet garde un accès total via peut().
   const estAdminComplet = profil && profil.role === 'administrateur';
-  const peutSupprimerCeSignalement = estAdminComplet || (estAuteur && peut('te', 'supprimer'));
+  const peutSupprimerCeSignalement = estAdminComplet || (estAuteur && peut('supprimer'));
 
   const marqueur = creerMarqueurSignalement(signalement, {
     supabase,
     auteur: estAuteur ? null : (info && info.nom) || null,
     peutSupprimer: peutSupprimerCeSignalement,
-    peutTraiter: peut('te', 'traiter'),
+    peutTraiter: peut('traiter'),
     surSuppression: (s) => effacerSignalement(s, marqueur),
     surTraitement: (s, statut) => traiterSignalement(s, statut, marqueur),
   });
@@ -1284,7 +792,7 @@ async function afficherSignalementsExistants() {
   // Avec le droit « consulter », on affiche les signalements de
   // toute l'équipe : sans cela, quelqu'un chargé de les traiter ne
   // verrait que les siens et son droit serait inopérant.
-  const voitTout = peut('te', 'consulter');
+  const voitTout = peut('consulter');
   const liste = await chargerSignalements(
     supabase,
     voitTout ? {} : { userId: session.user.id }

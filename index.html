@@ -10,16 +10,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <title>iter — Anthropotech Lab</title>
-<meta name="description" content="Enregistrez, analysez et optimisez vos parcours à pied ou en voiture.">
+<meta name="description" content="Signalez travaux, déchets, élagage et dangers sur le terrain, géolocalisés en temps réel.">
 
 <meta property="og:type" content="website">
-<meta property="og:title" content="iter — Every journey. Total insight.">
-<meta property="og:description" content="Enregistrez, analysez et optimisez vos parcours à pied ou en voiture. Distance, dénivelé, vitesse, coût, comparaison d'itinéraires.">
+<meta property="og:title" content="iter — Signaler sur le terrain">
+<meta property="og:description" content="Signalez travaux, déchets, élagage, danger ou signalétique à votre position GPS, avec photo à l'appui.">
 <meta property="og:image" content="https://iter-alpha.vercel.app/og-image.jpg">
 <meta property="og:url" content="https://iter-alpha.vercel.app/">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="iter — Every journey. Total insight.">
-<meta name="twitter:description" content="Enregistrez, analysez et optimisez vos parcours à pied ou en voiture.">
+<meta name="twitter:title" content="iter — Signaler sur le terrain">
+<meta name="twitter:description" content="Signalez travaux, déchets, élagage, danger ou signalétique à votre position GPS, avec photo à l'appui.">
 <meta name="twitter:image" content="https://iter-alpha.vercel.app/og-image.jpg">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0a0e1a">
@@ -59,13 +59,6 @@
     <span>iter</span>
   </div>
   <div class="topbar-social">
-    <button id="btn-import" title="Importer un parcours (GPX/CSV)" aria-label="Importer un parcours">
-      <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </button>
-    <input type="file" id="import-input" accept=".gpx,.csv" style="display:none;">
-    <a href="historique.html" class="topbar-btn" id="lien-historique" title="Historique" aria-label="Historique">
-      <svg viewBox="0 0 24 24"><path d="M3 3v5h5M3.05 13a9 9 0 1 0 2.13-6.36L3 8" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 7v5l4 2" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </a>
     <a href="supervision.html" class="topbar-btn" id="lien-supervision" title="Supervision" aria-label="Supervision" style="display:none;">
       <svg viewBox="0 0 24 24"><path d="M3 3v18h18" fill="none" stroke="#f3f5f8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="m7 15 4-4 3 3 5-6" fill="none" stroke="#3ddc97" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </a>
@@ -120,36 +113,16 @@
   <div class="onboarding-card">
     <div class="eyebrow">anthropotech /lab · iter</div>
     <h1>Comment ça marche</h1>
-    <p class="onboarding-intro">Enregistre, analyse et optimise tes trajets à pied ou en voiture. Voici à quoi sert chaque icône.</p>
+    <p class="onboarding-intro">Signale travaux, déchets, élagage, danger ou signalétique directement à ta position GPS. Voici à quoi sert chaque icône.</p>
 
     <div class="onboarding-list">
       <div class="onboarding-item">
         <div class="oi-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/><path d="M16 17h4"/><path d="M4 13h4"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0ZM12 9v4M12 17h.01"/></svg>
         </div>
         <div>
-          <div class="oi-titre">À pied / Voiture</div>
-          <div class="oi-desc">Choisis le type de trajet avant de démarrer — ça change les stats calculées (dénivelé, virages, coût carburant).</div>
-        </div>
-      </div>
-
-      <div class="onboarding-item">
-        <div class="oi-icon">
-          <div class="rec-dot" style="width:18px;height:18px;"></div>
-        </div>
-        <div>
-          <div class="oi-titre">Enregistrer</div>
-          <div class="oi-desc">Le gros bouton rond démarre le suivi GPS en direct. Pause et arrêt apparaissent une fois lancé.</div>
-        </div>
-      </div>
-
-      <div class="onboarding-item">
-        <div class="oi-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/></svg>
-        </div>
-        <div>
-          <div class="oi-titre">Distance, durée, vitesse</div>
-          <div class="oi-desc">Mises à jour en direct pendant l'enregistrement, avec vitesse de pointe et dénivelé dans le résumé final.</div>
+          <div class="oi-titre">Signaler</div>
+          <div class="oi-desc">Le bouton ouvre la feuille de signalement à ta position GPS actuelle. Ajoute une précision, une photo, puis choisis le type pour envoyer.</div>
         </div>
       </div>
 
@@ -159,36 +132,14 @@
         </div>
         <div>
           <div class="oi-titre">Recentrage</div>
-          <div class="oi-desc">Apparaît quand tu bouges la carte toi-même. Appuie dessus pour reprendre le suivi automatique façon GPS.</div>
-        </div>
-      </div>
-
-      <div class="onboarding-item">
-        <div class="oi-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
-        </div>
-        <div>
-          <div class="oi-titre">Importer</div>
-          <div class="oi-desc">Affiche sur la carte un parcours au format GPX ou CSV, même enregistré ailleurs.</div>
-        </div>
-      </div>
-
-      <div class="onboarding-item">
-        <div class="oi-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5M3.05 13a9 9 0 1 0 2.13-6.36L3 8"/><path d="M12 7v5l4 2"/></svg>
-        </div>
-        <div>
-          <div class="oi-titre">Historique</div>
-          <div class="oi-desc">Tous tes parcours passés. Glisse une fiche vers la gauche pour la supprimer, vers la droite pour la partager.</div>
+          <div class="oi-desc">Apparaît quand tu bouges la carte toi-même. Appuie dessus pour reprendre le suivi automatique de ta position.</div>
         </div>
       </div>
     </div>
 
     <div class="onboarding-strengths">
       <div class="eyebrow" style="margin-bottom:8px;">Points forts</div>
-      <div class="strength-line">Comparaison automatique avec tes trajets précédents sur le même itinéraire — sais si tu as pris le meilleur chemin</div>
-      <div class="strength-line">Export GPX/CSV et partage visuel (tracé + stats) en un geste</div>
-      <div class="strength-line">Coût carburant réel et température au moment du trajet</div>
+      <div class="strength-line">Signalements géolocalisés, avec photo, visibles par toute l'équipe autorisée</div>
       <div class="strength-line">Zéro tracker, données hébergées chez toi, conforme RGPD</div>
     </div>
 
@@ -197,14 +148,6 @@
 </div>
 
 <div id="boutons-flottants">
-  <button id="btn-girophare" title="Enregistrer un parcours" aria-label="Enregistrer un parcours">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M7 18v-6a5 5 0 1 1 10 0v6"/>
-      <path d="M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z"/>
-      <path d="M21 12h1M18.5 4.5 18 5M2 12h1M12 2v1M4.93 4.93l.7.7M12 12v6"/>
-    </svg>
-  </button>
-
   <button id="btn-signaler" title="Signaler" aria-label="Signaler">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0ZM12 9v4M12 17h.01"/></svg>
   </button>
@@ -319,91 +262,6 @@
     </div>
     <p class="mp-note">Plan IGN et Satellite sont fournis par l'IGN — Géoplateforme, et ne couvrent que le territoire français.</p>
     <p class="mp-erreur" id="mp-erreur" style="display:none;"></p>
-  </div>
-</div>
-
-<!-- ============================================================
-     CONTRÔLES D'ENREGISTREMENT
-     ============================================================ -->
-<div id="controls">
-  <div class="type-row">
-    <button class="type-choice active" data-type="pied" title="À pied" aria-label="À pied">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/>
-        <path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/>
-        <path d="M16 17h4"/>
-        <path d="M4 13h4"/>
-      </svg>
-    </button>
-    <button class="type-choice" data-type="voiture" title="Voiture" aria-label="Voiture">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2"/>
-        <circle cx="6.5" cy="16.5" r="2.5"/>
-        <circle cx="16.5" cy="16.5" r="2.5"/>
-      </svg>
-    </button>
-  </div>
-
-  <div class="stats-row">
-    <div class="stat-badge">
-      <div class="stat-circle">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/></svg>
-      </div>
-      <div class="stat-val" id="stat-distance">0 m</div>
-    </div>
-    <div class="stat-badge">
-      <div class="stat-circle">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      </div>
-      <div class="stat-val" id="stat-duree">00:00</div>
-    </div>
-    <div class="stat-badge">
-      <div class="stat-circle">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>
-      </div>
-      <div class="stat-val" id="stat-vitesse">0 km/h</div>
-    </div>
-  </div>
-
-  <div class="record-row">
-    <button class="btn-circle btn-pause" id="btn-pause" style="display:none;" title="Pause" aria-label="Pause">
-      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
-    </button>
-    <button class="btn-circle btn-record-main" id="btn-start" title="Démarrer l'enregistrement" aria-label="Démarrer l'enregistrement">
-      <span class="rec-dot"></span>
-    </button>
-    <button class="btn-circle btn-stop" id="btn-stop" style="display:none;" title="Arrêter" aria-label="Arrêter">
-      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-    </button>
-  </div>
-
-  <div id="summary-panel" style="display:none;">
-    <div class="summary-header">
-      <span class="eyebrow">Résumé du parcours</span>
-      <button id="summary-close" title="Fermer" aria-label="Fermer">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
-    <div class="summary-grid" id="summary-grid"></div>
-    <div class="comparaison-box" id="summary-comparaison" style="display:none;"></div>
-    <div class="export-row">
-      <span class="export-label">Parcours enregistré :</span>
-      <button id="export-gpx">GPX</button>
-      <button id="export-csv">CSV</button>
-      <button id="share-sms">SMS</button>
-    </div>
-  </div>
-</div>
-
-<!-- ============================================================
-     ALERTE SÉCURITÉ CONDUCTEUR — rouge réservé à l'urgence
-     ============================================================ -->
-<div id="driver-alert">
-  <h2>Es-tu bien passager ?</h2>
-  <p>La vitesse détectée correspond à un déplacement en voiture. Par sécurité, cette application ne doit jamais être utilisée par le conducteur.</p>
-  <div class="choices">
-    <button id="alert-confirm-passager">Je suis passager</button>
-    <button class="secondary" id="alert-stop-recording">Arrêter l'enregistrement</button>
   </div>
 </div>
 
