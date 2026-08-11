@@ -240,6 +240,10 @@ export function updateUserMarker(marker, lng, lat, accuracy, heading) {
   const el = marker.getElement();
   const accuracyEl = el.querySelector('.user-dot-accuracy');
   const headingEl = el.querySelector('.user-dot-heading');
+  // Photo de profil (si affichée à la place du point bleu, voir
+  // majPhotoPosition dans main.js) : pivote comme un pion de
+  // navigation selon le cap, en conservant son inclinaison 3D.
+  const photoEl = el.querySelector('.user-dot-photo');
 
   // Rayon de précision approximatif à l'écran (purement indicatif,
   // recalculé grossièrement selon le zoom actuel)
@@ -253,8 +257,10 @@ export function updateUserMarker(marker, lng, lat, accuracy, heading) {
   if (heading != null && !Number.isNaN(heading)) {
     headingEl.style.opacity = '1';
     headingEl.style.transform = `translateX(-50%) rotate(${heading}deg)`;
+    if (photoEl) photoEl.style.transform = `rotateX(35deg) rotate(${heading}deg)`;
   } else if (headingEl) {
     headingEl.style.opacity = '0';
+    if (photoEl) photoEl.style.transform = 'rotateX(35deg)';
   }
 }
 
