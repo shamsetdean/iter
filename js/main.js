@@ -642,7 +642,7 @@ async function chargerEtAfficherCategories() {
   conteneur.innerHTML = categoriesCache
     .map((c) => `
       <button class="fs-cat-carte" data-cat="${c.id}">
-        <span class="fs-cat-icone">${svgIcone(c.icone, 26, '#0a0e1a')}</span>
+        <span class="fs-cat-icone" style="background:${c.couleur || 'var(--accent)'}">${svgIcone(c.icone, 26, '#0a0e1a')}</span>
         <span class="fs-cat-nom">${c.nom}</span>
       </button>`)
     .join('');
@@ -677,11 +677,12 @@ async function chargerEtAfficherSousCategories(categoryId) {
     return;
   }
 
+  const couleurCat = etatSignalement.categorie?.couleur || 'var(--accent)';
   conteneur.innerHTML = liste
     .map((sc) => {
       const prio = LIBELLES_PRIORITE[sc.priorite_defaut] || LIBELLES_PRIORITE.normal;
       return `
-      <button class="fs-souscat-ligne" data-souscat="${sc.id}">
+      <button class="fs-souscat-ligne" data-souscat="${sc.id}" style="border-left:3px solid ${couleurCat}">
         <span class="fs-souscat-nom">${sc.nom}</span>
         <span class="fs-souscat-prio" title="Priorité ${prio.libelle}">${prio.emoji}</span>
       </button>`;

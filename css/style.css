@@ -493,7 +493,7 @@ body.ui-idle #boutons-flottants { opacity: 0.16; }
 .fs-cat-icone {
   width: 46px; height: 46px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  background: var(--accent); color: #0a0e1a;
+  color: #0a0e1a;
 }
 .fs-cat-nom { font-size: 12px; font-weight: 600; color: var(--ink); text-align: center; line-height: 1.25; }
 

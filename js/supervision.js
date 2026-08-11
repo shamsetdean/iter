@@ -1139,9 +1139,10 @@ function rendreCategoriesAdmin() {
         <div class="cat-entete">
           <button class="cat-fleche" data-cat-monter="${c.id}" ${index === 0 ? 'disabled' : ''} title="Monter">▲</button>
           <button class="cat-fleche" data-cat-descendre="${c.id}" ${index === tri.length - 1 ? 'disabled' : ''} title="Descendre">▼</button>
-          <span class="cat-icone-apercu">${svgIcone(c.icone, 20, 'var(--ink)')}</span>
+          <span class="cat-icone-apercu" style="background:${c.couleur}">${svgIcone(c.icone, 18, '#0a0e1a')}</span>
           <input type="text" class="cat-nom" data-cat-nom="${c.id}" value="${c.nom.replace(/"/g, '&quot;')}">
           <select data-cat-icone="${c.id}">${optionsIcones}</select>
+          <input type="color" class="cat-couleur" data-cat-couleur="${c.id}" value="${c.couleur}" title="Couleur de la catégorie">
           <button class="cat-toggle ${c.is_active ? 'actif' : ''}" data-cat-toggle="${c.id}" title="${c.is_active ? 'Désactiver' : 'Activer'}">${c.is_active ? 'Active' : 'Inactive'}</button>
           <button class="cat-suppr" data-cat-suppr="${c.id}" title="Supprimer la catégorie et ses sous-catégories">✕</button>
         </div>
@@ -1206,6 +1207,21 @@ function brancherCategoriesAdmin() {
       try {
         await enregistrerCategorie(supabase, { ...cat, icone: sel.value });
         cat.icone = sel.value;
+        rendreCategoriesAdmin();
+      } catch (err) {
+        retourCategorie(id, `Échec : ${err.message}`, 'erreur');
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-cat-couleur]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const id = input.dataset.catCouleur;
+      const cat = categoriesAdmin.find((c) => c.id === id);
+      if (!cat) return;
+      try {
+        await enregistrerCategorie(supabase, { ...cat, couleur: input.value });
+        cat.couleur = input.value;
         rendreCategoriesAdmin();
       } catch (err) {
         retourCategorie(id, `Échec : ${err.message}`, 'erreur');
@@ -1424,7 +1440,7 @@ document.getElementById('btn-ajouter-categorie')?.addEventListener('click', asyn
 
   try {
     await enregistrerCategorie(supabase, {
-      id, nom: nom.trim(), icone: 'autre', sort_order: ordreMax + 1, is_active: true,
+      id, nom: nom.trim(), icone: 'autre', couleur: '#3fb6f5', sort_order: ordreMax + 1, is_active: true,
     });
     await rafraichirEtRerendre();
   } catch (err) {

@@ -159,7 +159,14 @@
   }
   .cat-carte.inactive { opacity: 0.5; }
   .cat-entete { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .cat-icone-apercu { display: flex; align-items: center; flex-shrink: 0; }
+  .cat-icone-apercu {
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 30px; height: 30px; border-radius: 50%;
+  }
+  .cat-couleur {
+    width: 30px; height: 30px; padding: 0; border-radius: 8px; flex-shrink: 0;
+    border: 1px solid var(--border); background: none; cursor: pointer;
+  }
   .cat-fleche {
     width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0;
     font-size: 9px; color: var(--ink-dim);
