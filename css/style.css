@@ -298,6 +298,7 @@ input {
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  perspective: 320px;
 }
 .user-dot-accuracy {
   position: absolute;
@@ -1112,7 +1113,12 @@ button:focus-visible {
 #profil-pastille { display: flex; }
 #profil-pastille .pastille-identite { border-width: 0; box-shadow: none; }
 
-/* Marqueur de position : le visage remplace le point bleu */
+/* Marqueur de position : le visage remplace le point bleu.
+   Inclinaison type "pion de navigation" (Google Maps) : le disque
+   est penché en permanence (perspective portée par .user-dot-wrap)
+   et pivote sur lui-même selon le cap du téléphone, mis à jour
+   dans updateUserMarker() (map.js). Le dégradé en ::after simule
+   un reflet lumineux pour l'effet de relief. */
 .user-dot-photo {
   position: absolute;
   z-index: 3;
@@ -1120,7 +1126,19 @@ button:focus-visible {
   border: 3px solid #fff;
   background-size: cover;
   background-position: center;
-  box-shadow: 0 0 10px rgba(63, 182, 245, 0.8);
+  box-shadow: 0 6px 14px rgba(6, 9, 16, 0.45), 0 0 10px rgba(63, 182, 245, 0.8);
+  transform: rotateX(35deg);
+  transform-origin: 50% 65%;
+  transition: transform 0.35s ease;
+  will-change: transform;
+}
+.user-dot-photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.14) 32%, rgba(255, 255, 255, 0) 58%);
+  pointer-events: none;
 }
 
 /* Feuille « Mon profil » */
