@@ -20,6 +20,8 @@
 
 import { supabase, getSession, signIn, signOut, onAuthChange, envoyerLienReinitialisation } from './supabase-client.js';
 import { STYLES } from './map.js';
+import { echapperHtml } from './html.js';
+import { surveillerInactivite } from './inactivite.js';
 import {
   svgIcone, LIBELLES_PRIORITE, LIBELLES_STATUT, LIBELLES_ICONES,
   chargerCategories, chargerToutesSousCategories, chargerServices,
@@ -175,6 +177,7 @@ function afficherEcran(nom) {
 async function verifierAcces() {
   const session = await getSession();
   if (!session) {
+    sessionCourante = null;
     afficherEcran('auth');
     return;
   }
@@ -190,6 +193,7 @@ async function verifierAcces() {
 
   if (resProfil.error) {
     console.error('Lecture du profil impossible :', resProfil.error);
+    sessionCourante = null;
     afficherEcran('refus');
     return;
   }
@@ -198,6 +202,7 @@ async function verifierAcces() {
   estAccesDashboard = estAdminComplet || Boolean(resDroitTe.data && resDroitTe.data.acces_dashboard);
 
   if (!estAccesDashboard) {
+    sessionCourante = null;
     afficherEcran('refus');
     return;
   }
@@ -216,6 +221,8 @@ async function verifierAcces() {
 
 onAuthChange(() => verifierAcces());
 verifierAcces();
+
+surveillerInactivite(() => !!sessionCourante, () => signOut());
 
 // ------------------------------------------------------------
 // Chargement des données
@@ -344,7 +351,11 @@ function rendreSignalements() {
   el.innerHTML = liste
     .map((s) => {
       const prio = LIBELLES_PRIORITE[s.priorite] || LIBELLES_PRIORITE.normal;
-      const nomAffiche = s.sous_categorie_nom || s.categorie_nom || 'Signalement';
+      const nomAffiche = echapperHtml(s.sous_categorie_nom || s.categorie_nom || 'Signalement');
+      const categorieNom = echapperHtml(s.categorie_nom);
+      const auteurNom = echapperHtml(profils.get(s.user_id) || 'Inconnu');
+      const statutLibelle = echapperHtml(LIBELLES_STATUT[s.statut] || s.statut);
+      const commentaire = echapperHtml(s.commentaire);
       const date = new Date(s.created_at).toLocaleString('fr-FR', {
         day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
       });
@@ -354,8 +365,8 @@ function rendreSignalements() {
         <div class="sig-rond" style="background:${prio.couleur}">${svgIcone(s.categorie_icone || 'autre', 19, '#0a0e1a')}</div>
         <div class="sig-infos">
           <div class="sig-type">${prio.emoji} ${nomAffiche}</div>
-          <div class="sig-meta">${s.categorie_nom || ''}${s.categorie_nom ? ' · ' : ''}${profils.get(s.user_id) || 'Inconnu'} · ${date} · ${LIBELLES_STATUT[s.statut] || s.statut}</div>
-          ${s.commentaire ? `<div class="sig-note">« ${s.commentaire} »</div>` : ''}
+          <div class="sig-meta">${categorieNom}${s.categorie_nom ? ' · ' : ''}${auteurNom} · ${date} · ${statutLibelle}</div>
+          ${s.commentaire ? `<div class="sig-note">« ${commentaire} »</div>` : ''}
         </div>
         <div class="sig-actions">
           <button class="localiser" data-loc="${s.id}" title="Localiser sur la carte" aria-label="Localiser">
@@ -586,16 +597,16 @@ function resumeDetails(j) {
   const d = j.details || {};
   const morceaux = [];
 
-  if (d.type) morceaux.push(d.type);
-  if (d.titre) morceaux.push(`« ${d.titre} »`);
-  if (d.nom) morceaux.push(`« ${d.nom} »`);
-  if (d.cible) morceaux.push(`pour ${d.cible}`);
+  if (d.type) morceaux.push(echapperHtml(d.type));
+  if (d.titre) morceaux.push(`« ${echapperHtml(d.titre)} »`);
+  if (d.nom) morceaux.push(`« ${echapperHtml(d.nom)} »`);
+  if (d.cible) morceaux.push(`pour ${echapperHtml(d.cible)}`);
 
   if (j.action === 'traitement' && d.ancien_statut) {
-    morceaux.push(`${d.ancien_statut} → ${d.nouveau_statut}`);
+    morceaux.push(`${echapperHtml(d.ancien_statut)} → ${echapperHtml(d.nouveau_statut)}`);
   }
   if (j.action === 'suppression') {
-    if (d.auteur_initial) morceaux.push(`créé par ${d.auteur_initial}`);
+    if (d.auteur_initial) morceaux.push(`créé par ${echapperHtml(d.auteur_initial)}`);
     if (d.etait_traite === true) morceaux.push('déjà traité');
   }
   return morceaux.join(' · ');
@@ -621,8 +632,10 @@ function rendreJournal() {
       const quand = new Date(j.created_at).toLocaleString('fr-FR', {
         day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit',
       });
-      const cible = LIBELLES_CIBLE[j.table_cible] || j.table_cible;
+      const cible = echapperHtml(LIBELLES_CIBLE[j.table_cible] || j.table_cible);
       const resume = resumeDetails(j);
+      const auteurJournal = echapperHtml(j.auteur);
+      const actionLibelle = echapperHtml(LIBELLES_ACTION[j.action] || j.action);
       const contenuSupprime = j.donnees_supprimees
         ? `<button class="jr-voir" data-donnees="${j.id}">Voir la donnée supprimée</button>`
         : '';
@@ -631,7 +644,7 @@ function rendreJournal() {
       <div class="jr-ligne ${j.action}">
         <span class="jr-pastille"></span>
         <span class="jr-quoi">
-          <span class="jr-qui">${j.auteur}</span> ${LIBELLES_ACTION[j.action] || j.action} ${cible}
+          <span class="jr-qui">${auteurJournal}</span> ${actionLibelle} ${cible}
           ${resume ? `<span class="jr-detail">${resume}</span>` : ''}
           ${contenuSupprime}
         </span>
@@ -780,8 +793,8 @@ function rendreComptes() {
       <div class="compte-carte" data-carte="${c.user_id}">
         <div class="cc-entete">
           <div class="cc-identite">
-            <div class="cc-nom">${c.nom || c.email.split('@')[0]}</div>
-            <div class="cc-mail">${c.email}</div>
+            <div class="cc-nom">${echapperHtml(c.nom || c.email.split('@')[0])}</div>
+            <div class="cc-mail">${echapperHtml(c.email)}</div>
           </div>
           <button class="cc-droit ${estAdmin ? 'actif' : ''}" data-user="${c.user_id}" data-role
                   ${dernierAdmin ? 'disabled title="Dernier administrateur : le rôle ne peut pas être retiré"' : ''}>
@@ -945,7 +958,7 @@ function rendreCategoriesAdmin() {
 
   const optionsIcones = LIBELLES_ICONES.map((i) => `<option value="${i}">${i}</option>`).join('');
   const optionsServices = ['<option value="">— aucun —</option>']
-    .concat(servicesAdmin.map((s) => `<option value="${s.id}">${s.nom}</option>`))
+    .concat(servicesAdmin.map((s) => `<option value="${s.id}">${echapperHtml(s.nom)}</option>`))
     .join('');
   const optionsPriorite = Object.entries(LIBELLES_PRIORITE)
     .map(([v, p]) => `<option value="${v}">${p.emoji} ${p.libelle}</option>`)
@@ -962,7 +975,7 @@ function rendreCategoriesAdmin() {
         <div class="cat-sub-ligne ${!s.is_active ? 'inactive' : ''}" data-sub="${s.id}">
           <button class="cat-fleche" data-sub-monter="${s.id}" ${si === 0 ? 'disabled' : ''} title="Monter">▲</button>
           <button class="cat-fleche" data-sub-descendre="${s.id}" ${si === subs.length - 1 ? 'disabled' : ''} title="Descendre">▼</button>
-          <input type="text" class="cat-sub-nom" data-sub-nom="${s.id}" value="${s.nom.replace(/"/g, '&quot;')}">
+          <input type="text" class="cat-sub-nom" data-sub-nom="${s.id}" value="${echapperHtml(s.nom)}">
           <select data-sub-service="${s.id}">${optionsServices}</select>
           <select data-sub-priorite="${s.id}">${optionsPriorite}</select>
           <input type="number" min="0" class="cat-sub-delai" data-sub-delai="${s.id}" value="${s.delai_indicatif_jours ?? ''}" title="Délai indicatif (jours)">
@@ -977,7 +990,7 @@ function rendreCategoriesAdmin() {
           <button class="cat-fleche" data-cat-monter="${c.id}" ${index === 0 ? 'disabled' : ''} title="Monter">▲</button>
           <button class="cat-fleche" data-cat-descendre="${c.id}" ${index === tri.length - 1 ? 'disabled' : ''} title="Descendre">▼</button>
           <span class="cat-icone-apercu" style="background:${c.couleur}">${svgIcone(c.icone, 18, '#0a0e1a')}</span>
-          <input type="text" class="cat-nom" data-cat-nom="${c.id}" value="${c.nom.replace(/"/g, '&quot;')}">
+          <input type="text" class="cat-nom" data-cat-nom="${c.id}" value="${echapperHtml(c.nom)}">
           <select data-cat-icone="${c.id}">${optionsIcones}</select>
           <input type="color" class="cat-couleur" data-cat-couleur="${c.id}" value="${c.couleur}" title="Couleur de la catégorie">
           <button class="cat-toggle ${c.is_active ? 'actif' : ''}" data-cat-toggle="${c.id}" title="${c.is_active ? 'Désactiver' : 'Activer'}">${c.is_active ? 'Active' : 'Inactive'}</button>
@@ -1466,7 +1479,7 @@ function rendreRepartitionCategories(el, liste) {
       ([nom, n]) => `
     <div class="stats-barre-ligne">
       <span class="stats-cat-puce" style="background:${couleurDe(nom)}"></span>
-      <span class="stats-barre-label" title="${nom}">${nom}</span>
+      <span class="stats-barre-label" title="${echapperHtml(nom)}">${echapperHtml(nom)}</span>
       <span class="stats-barre-piste"><span class="stats-barre-remplissage" style="width:${((n / max) * 100).toFixed(0)}%;background:${couleurDe(nom)}"></span></span>
       <span class="stats-barre-valeur">${n}</span>
     </div>`
@@ -1556,7 +1569,7 @@ function rendreTableDelais(el, liste) {
             }
             return `
           <tr>
-            <td>${l.nom}</td>
+            <td>${echapperHtml(l.nom)}</td>
             <td class="num">${l.nb}</td>
             <td class="num">${l.delaiReel != null ? formatJours(l.delaiReel) : '—'}</td>
             <td class="num">${l.delaiIndicatif != null ? formatJours(l.delaiIndicatif) : '—'}</td>

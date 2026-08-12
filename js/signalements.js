@@ -12,6 +12,7 @@
 // ============================================================
 
 import { svgIcone, LIBELLES_PRIORITE, LIBELLES_STATUT } from './categories.js';
+import { echapperHtml } from './html.js';
 
 // ------------------------------------------------------------
 // Photos
@@ -202,13 +203,19 @@ export function creerMarqueurSignalement(signalement, options = {}) {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
   });
 
+  const nomAfficheEch = echapperHtml(nomAffiche);
+  const categorieNomEch = echapperHtml(signalement.categorie_nom);
+  const auteurEch = auteur ? echapperHtml(auteur) : '';
+  const commentaireEch = echapperHtml(signalement.commentaire);
+  const statutEch = echapperHtml(LIBELLES_STATUT[signalement.statut] || signalement.statut);
+
   const contenu = document.createElement('div');
   contenu.className = 'popup-signalement';
   contenu.innerHTML = `
-    <div class="ps-titre" style="color:${priorite.couleur}">${priorite.emoji} ${nomAffiche}</div>
-    <div class="ps-meta">${signalement.categorie_nom || ''}${signalement.categorie_nom ? ' · ' : ''}${auteur ? auteur + ' · ' : ''}${date}</div>
-    ${signalement.commentaire ? `<div class="ps-note">« ${signalement.commentaire} »</div>` : ''}
-    <div class="ps-statut">${LIBELLES_STATUT[signalement.statut] || signalement.statut}</div>
+    <div class="ps-titre" style="color:${priorite.couleur}">${priorite.emoji} ${nomAfficheEch}</div>
+    <div class="ps-meta">${categorieNomEch}${signalement.categorie_nom ? ' · ' : ''}${auteurEch ? auteurEch + ' · ' : ''}${date}</div>
+    ${signalement.commentaire ? `<div class="ps-note">« ${commentaireEch} »</div>` : ''}
+    <div class="ps-statut">${statutEch}</div>
     <div class="ps-photo" data-photo></div>
     ${peutTraiter ? `
       <select class="ps-statut-select" data-statut-select>

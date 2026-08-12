@@ -23,6 +23,8 @@ import {
   supprimerSignalement,
   changerStatutSignalement,
 } from './signalements.js';
+import { echapperHtml } from './html.js';
+import { surveillerInactivite } from './inactivite.js';
 
 let map = null;
 let session = null;
@@ -72,6 +74,11 @@ document.getElementById('auth-submit')?.addEventListener('click', async () => {
 
   if (!email || !password) {
     authError.textContent = 'Renseigne un email et un mot de passe.';
+    return;
+  }
+
+  if (authMode === 'signup' && password.length < 10) {
+    authError.textContent = 'Le mot de passe doit contenir au moins 10 caractères.';
     return;
   }
 
@@ -184,6 +191,8 @@ onAuthChange((s) => {
   authScreen.style.display = session ? 'none' : 'flex';
   if (session) apresConnexion();
 });
+
+surveillerInactivite(() => !!session, () => signOut());
 
 getSession().then((s) => {
   session = s;
@@ -643,7 +652,7 @@ async function chargerEtAfficherCategories() {
     .map((c) => `
       <button class="fs-cat-carte" data-cat="${c.id}">
         <span class="fs-cat-icone" style="background:${c.couleur || 'var(--accent)'}">${svgIcone(c.icone, 26, '#0a0e1a')}</span>
-        <span class="fs-cat-nom">${c.nom}</span>
+        <span class="fs-cat-nom">${echapperHtml(c.nom)}</span>
       </button>`)
     .join('');
 
@@ -683,7 +692,7 @@ async function chargerEtAfficherSousCategories(categoryId) {
       const prio = LIBELLES_PRIORITE[sc.priorite_defaut] || LIBELLES_PRIORITE.normal;
       return `
       <button class="fs-souscat-ligne" data-souscat="${sc.id}" style="border-left:3px solid ${couleurCat}">
-        <span class="fs-souscat-nom">${sc.nom}</span>
+        <span class="fs-souscat-nom">${echapperHtml(sc.nom)}</span>
         <span class="fs-souscat-prio" title="Priorité ${prio.libelle}">${prio.emoji}</span>
       </button>`;
     })

@@ -17,7 +17,7 @@
 
 import { supabase, getSession } from './supabase-client.js';
 
-const LONGUEUR_MINIMALE = 8;
+const LONGUEUR_MINIMALE = 10;
 
 const sousTitre = document.getElementById('sous-titre');
 const formulaire = document.getElementById('formulaire');
