@@ -358,6 +358,80 @@
   .stats-ecart-depasse { color: var(--danger); font-weight: 700; }
   .stats-ecart-tenu { color: var(--green); font-weight: 700; }
   .stats-cat-puce { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; flex-shrink: 0; }
+
+  /* ------------------------------------------------------------
+     Export PDF de la page Statistiques — repose sur window.print()
+     et une feuille de style dédiée : aucune dépendance externe,
+     rendu vectoriel (le graphique SVG reste net à l'impression),
+     fonctionne hors ligne. L'en-tête ci-dessous n'existe que pour
+     l'impression, jamais affiché à l'écran.
+     ------------------------------------------------------------ */
+  .stats-print-entete { display: none; }
+
+  @media print {
+    @page { size: A4 portrait; margin: 16mm 14mm; }
+
+    /* Rapport toujours imprimé en clair, quel que soit le thème
+       actif à l'écran : plus lisible et plus économe en encre. */
+    html, html[data-theme="clair"] {
+      --bg: #ffffff;
+      --bg-elevated: #ffffff;
+      --surface: #ffffff;
+      --ink: #14161d;
+      --ink-dim: #55596b;
+      --border: #d9dbe1;
+      --border-strong: #b7bac4;
+      --blue: #0d6dae;
+      --green: #147a5a;
+      --danger: #b83430;
+    }
+    html, body { background: #fff !important; background-image: none !important; }
+
+    /* Seule la page Statistiques doit apparaître. */
+    .sidebar, .page:not([data-page="statistiques"]) { display: none !important; }
+    .page[data-page="statistiques"] { display: block !important; }
+    .main-content { max-width: none; padding: 0; }
+
+    /* Rien de cliquable n'a de sens sur papier. */
+    #filtres-periode, .page-header .bt-action, .bt-action { display: none !important; }
+
+    /* Le texte en dégradé (-webkit-background-clip:text) est un
+       piège classique à l'impression Chrome/Safari : il disparaît
+       purement et simplement sur certains moteurs de rendu PDF.
+       On repasse en couleur pleine, garantie visible. */
+    .stats-kpi-val, .synthese-val {
+      background: none !important;
+      -webkit-text-fill-color: var(--ink) !important;
+      color: var(--ink) !important;
+    }
+
+    .stats-print-entete {
+      display: block;
+      margin-bottom: 22px;
+      padding-bottom: 14px;
+      border-bottom: 2px solid var(--ink);
+    }
+    .stats-print-entete .spe-marque {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em;
+      color: var(--ink-dim); font-weight: 600;
+    }
+    .stats-print-entete h1 { font-size: 20px; margin: 3px 0 4px; }
+    .stats-print-entete .spe-meta { font-size: 11px; color: var(--ink-dim); }
+
+    /* Pagination propre : on évite de couper une carte, une ligne
+       de tableau ou un bloc au milieu, sans forcer de saut de page
+       inutile — le navigateur répartit sur autant de pages A4 que
+       nécessaire. */
+    .stats-grille, .stats-deux-colonnes { break-inside: avoid; }
+    .stats-kpi-carte, .stats-bloc, .compte-carte, .cat-carte,
+    .stats-barre-ligne, .stats-table tr {
+      break-inside: avoid;
+    }
+    .stats-bloc { border: 1px solid var(--border); box-shadow: none; }
+    .stats-table th, .stats-table td { border-color: var(--border-strong); }
+
+    a[href]::after { content: ''; } /* n'affiche pas les URLs des liens au verso */
+  }
 </style>
 </head>
 <body>
@@ -501,11 +575,23 @@
           <h2>Statistiques</h2>
           <div class="page-sub">Vision globale de l'activité et de l'efficacité de traitement</div>
         </div>
-        <div class="filtres" id="filtres-periode">
-          <button class="f-periode" data-periode="7">7 jours</button>
-          <button class="f-periode active" data-periode="30">30 jours</button>
-          <button class="f-periode" data-periode="0">Tout</button>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div class="filtres" id="filtres-periode">
+            <button class="f-periode" data-periode="7">7 jours</button>
+            <button class="f-periode active" data-periode="30">30 jours</button>
+            <button class="f-periode" data-periode="0">Tout</button>
+          </div>
+          <button id="btn-export-pdf" class="bt-action">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 17v-4h1.5a1.5 1.5 0 0 1 0 3H9M13 17v-4h2M13 15h1.5M17 17v-4h1.5"/></svg>
+            Exporter en PDF
+          </button>
         </div>
+      </div>
+
+      <div class="stats-print-entete" id="stats-print-entete">
+        <div class="spe-marque">anthropotech /lab · iter</div>
+        <h1>Rapport statistiques — Signalements</h1>
+        <div class="spe-meta" id="stats-print-meta"></div>
       </div>
 
       <div class="stats-grille" id="stats-kpi"></div>

@@ -1324,6 +1324,12 @@ function rendreStatistiques() {
   const elTable = document.getElementById('stats-table');
   if (!elKpi || !elEvo || !elCat || !elStatuts || !elTable) return;
 
+  const elMeta = document.getElementById('stats-print-meta');
+  if (elMeta) {
+    const libellePeriode = periodeStats === 7 ? '7 derniers jours' : periodeStats === 30 ? '30 derniers jours' : 'toutes périodes confondues';
+    elMeta.textContent = `Période : ${libellePeriode} — généré le ${new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })} à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
   const liste = signalementsPeriode();
 
   if (liste.length === 0) {
@@ -1561,3 +1567,15 @@ function rendreTableDelais(el, liste) {
       </tbody>
     </table>`;
 }
+
+// ------------------------------------------------------------
+// Export PDF de la page Statistiques — repose sur l'impression
+// native du navigateur (window.print + feuille @media print
+// dédiée dans supervision.html) : aucune dépendance externe,
+// hors ligne, rendu vectoriel du graphique. Dans la boîte de
+// dialogue d'impression, choisir « Enregistrer au format PDF »
+// comme destination.
+// ------------------------------------------------------------
+document.getElementById('btn-export-pdf')?.addEventListener('click', () => {
+  window.print();
+});
