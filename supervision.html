@@ -310,14 +310,54 @@
   }
 
   /* ------------------------------------------------------------
-     Page Statistiques — livrée à l'étape suivante
+     Page Statistiques
      ------------------------------------------------------------ */
-  .stats-grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .stats-grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 18px; }
   .stats-bloc {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: 14px; padding: 20px;
+    border-radius: 14px; padding: 20px; margin-bottom: 18px;
   }
-  .stats-bloc h3 { font-size: 13px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 14px; }
+  .stats-bloc h3 { font-size: 13px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 16px; }
+  .stats-bloc-large { margin-bottom: 18px; }
+
+  .stats-kpi-carte { text-align: center; }
+  .stats-kpi-val {
+    font-size: 26px; font-weight: 700;
+    background: var(--gradient); -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .stats-kpi-label { font-size: 11px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 5px; }
+  .stats-kpi-sub { font-size: 10.5px; color: var(--ink-dim); margin-top: 2px; }
+
+  .stats-deux-colonnes { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 1060px) { .stats-deux-colonnes { grid-template-columns: 1fr; } }
+
+  .stats-barre-ligne { display: flex; align-items: center; gap: 10px; margin-bottom: 11px; font-size: 12px; }
+  .stats-barre-ligne:last-child { margin-bottom: 0; }
+  .stats-barre-label {
+    width: 150px; flex-shrink: 0; color: var(--ink-dim);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .stats-barre-piste { flex: 1; height: 10px; border-radius: 6px; background: rgba(255,255,255,0.04); overflow: hidden; }
+  html[data-theme="clair"] .stats-barre-piste { background: rgba(16,20,31,0.05); }
+  .stats-barre-remplissage { height: 100%; border-radius: 6px; transition: width 0.3s ease; }
+  .stats-barre-valeur { width: 30px; text-align: right; font-weight: 700; flex-shrink: 0; }
+
+  .stats-evolution-svg { width: 100%; height: auto; display: block; }
+  .stats-evolution-legende { display: flex; gap: 18px; margin-top: 10px; font-size: 11px; color: var(--ink-dim); }
+  .stats-evolution-legende span { display: inline-flex; align-items: center; gap: 6px; }
+  .stats-evolution-legende i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+  .stats-table table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .stats-table th {
+    text-align: left; color: var(--ink-dim); font-weight: 600; text-transform: uppercase;
+    font-size: 10px; letter-spacing: 0.05em; padding: 7px 10px; border-bottom: 1px solid var(--border);
+  }
+  .stats-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
+  .stats-table tr:last-child td { border-bottom: none; }
+  .stats-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .stats-ecart-depasse { color: var(--danger); font-weight: 700; }
+  .stats-ecart-tenu { color: var(--green); font-weight: 700; }
+  .stats-cat-puce { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -461,8 +501,35 @@
           <h2>Statistiques</h2>
           <div class="page-sub">Vision globale de l'activité et de l'efficacité de traitement</div>
         </div>
+        <div class="filtres" id="filtres-periode">
+          <button class="f-periode" data-periode="7">7 jours</button>
+          <button class="f-periode active" data-periode="30">30 jours</button>
+          <button class="f-periode" data-periode="0">Tout</button>
+        </div>
       </div>
-      <div id="stats-contenu" class="etat">Cette page sera complétée à l'étape suivante (indicateurs, graphiques, tableaux).</div>
+
+      <div class="stats-grille" id="stats-kpi"></div>
+
+      <div class="stats-bloc stats-bloc-large">
+        <h3>Évolution des signalements</h3>
+        <div id="stats-evolution" class="etat">Chargement…</div>
+      </div>
+
+      <div class="stats-deux-colonnes">
+        <div class="stats-bloc">
+          <h3>Répartition par catégorie</h3>
+          <div id="stats-categories" class="etat">Chargement…</div>
+        </div>
+        <div class="stats-bloc">
+          <h3>Réponses apportées</h3>
+          <div id="stats-statuts" class="etat">Chargement…</div>
+        </div>
+      </div>
+
+      <div class="stats-bloc stats-bloc-large">
+        <h3>Délais par catégorie — réel vs indicatif</h3>
+        <div id="stats-table" class="etat">Chargement…</div>
+      </div>
     </section>
 
     <!-- PAGE : Comptes et droits — réservée à Shams -->

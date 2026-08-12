@@ -240,6 +240,11 @@ async function charger() {
   await chargerCategoriesAdmin();
   rendreCategoriesAdmin();
 
+  // Statistiques : dépend des signalements (déjà chargés) et des
+  // catégories (couleurs, délais indicatifs par sous-catégorie),
+  // donc placée après le chargement des deux.
+  rendreStatistiques();
+
   if (estAdminComplet) {
     await chargerJournal();
     await chargerComptes();
@@ -406,10 +411,18 @@ async function majStatut(id, statut) {
   try {
     await changerStatutSignalement(supabase, sessionCourante, id, statut);
     const s = signalements.find((x) => x.id === id);
-    if (s) s.statut = statut;
+    if (s) {
+      s.statut = statut;
+      // Reflète localement ce que changerStatutSignalement vient de
+      // faire côté base (traite_at renseigné pour resolu/cloture,
+      // remis à null sinon) — évite un écart avec les statistiques
+      // tant que la page n'est pas rechargée.
+      s.traite_at = (statut === 'resolu' || statut === 'cloture') ? new Date().toISOString() : null;
+    }
     rendreSynthese();
     rendreSignalements();
     dessinerSignalements();
+    rendreStatistiques();
   } catch (err) {
     alert(`Mise à jour impossible : ${err.message}`);
   }
@@ -423,6 +436,7 @@ async function majPriorite(id, priorite) {
     rendreSynthese();
     rendreSignalements();
     dessinerSignalements();
+    rendreStatistiques();
   } catch (err) {
     alert(`Mise à jour impossible : ${err.message}`);
   }
@@ -440,6 +454,7 @@ async function effacerSignalement(id) {
     rendreSynthese();
     rendreSignalements();
     dessinerSignalements();
+    rendreStatistiques();
   } catch (err) {
     alert(`Suppression impossible : ${err.message}`);
   }
@@ -1267,3 +1282,282 @@ document.getElementById('btn-ajouter-categorie')?.addEventListener('click', asyn
     alert(`Création impossible : ${err.message}`);
   }
 });
+
+// ============================================================
+// STATISTIQUES — visible par les 3 comptes ayant acces_dashboard.
+// Calculées uniquement à partir de vue_signalements (accessible
+// aux 3) et des catégories déjà chargées : aucune dépendance au
+// journal d'activité, dont la lecture reste réservée à
+// l'administrateur complet.
+// ============================================================
+let periodeStats = 30; // 7 | 30 | 0 (0 = tout)
+
+document.querySelectorAll('.f-periode').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.f-periode').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    periodeStats = parseInt(btn.dataset.periode, 10);
+    rendreStatistiques();
+  });
+});
+
+function signalementsPeriode() {
+  if (!periodeStats) return signalements;
+  const seuil = Date.now() - periodeStats * 86400000;
+  return signalements.filter((s) => new Date(s.created_at).getTime() >= seuil);
+}
+
+function formatJours(j) {
+  if (j < 1) return `${Math.round(j * 24)} h`;
+  return `${j.toFixed(1)} j`;
+}
+
+function formatDateCourte(iso) {
+  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+}
+
+function rendreStatistiques() {
+  const elKpi = document.getElementById('stats-kpi');
+  const elEvo = document.getElementById('stats-evolution');
+  const elCat = document.getElementById('stats-categories');
+  const elStatuts = document.getElementById('stats-statuts');
+  const elTable = document.getElementById('stats-table');
+  if (!elKpi || !elEvo || !elCat || !elStatuts || !elTable) return;
+
+  const liste = signalementsPeriode();
+
+  if (liste.length === 0) {
+    elKpi.innerHTML = '';
+    [elEvo, elCat, elStatuts, elTable].forEach((el) => {
+      el.className = 'etat';
+      el.innerHTML = 'Aucun signalement sur cette période.';
+    });
+    return;
+  }
+
+  rendreKpi(elKpi, liste);
+  rendreEvolution(elEvo);
+  rendreRepartitionCategories(elCat, liste);
+  rendreRepartitionStatuts(elStatuts, liste);
+  rendreTableDelais(elTable, liste);
+}
+
+// ------------------------------------------------------------
+// Indicateurs clés
+// ------------------------------------------------------------
+function rendreKpi(el, liste) {
+  const total = liste.length;
+  const resolus = liste.filter((s) => s.statut === 'resolu' || s.statut === 'cloture');
+  const actifs = liste.filter((s) => !STATUTS_CLOS.includes(s.statut));
+  const tauxResolution = total ? Math.round((resolus.length / total) * 100) : 0;
+
+  // Délai de traitement : du dépôt à la clôture effective (resolu/cloture).
+  const delais = resolus
+    .filter((s) => s.traite_at)
+    .map((s) => (new Date(s.traite_at) - new Date(s.created_at)) / 86400000);
+  const delaiMoyen = delais.length ? delais.reduce((a, b) => a + b, 0) / delais.length : null;
+
+  // Temps de réactivité : ancienneté moyenne des dossiers encore
+  // ouverts — indique si les demandes en attente s'accumulent ou
+  // sont prises en charge rapidement.
+  const ages = actifs.map((s) => (Date.now() - new Date(s.created_at).getTime()) / 86400000);
+  const ageMoyen = ages.length ? ages.reduce((a, b) => a + b, 0) / ages.length : null;
+
+  const urgents = actifs.filter((s) => s.priorite === 'urgent').length;
+
+  const cases = [
+    [String(total), 'Signalements', null],
+    [`${tauxResolution}%`, 'Taux de résolution', `${resolus.length} résolu(s)/clôturé(s) sur ${total}`],
+    [delaiMoyen != null ? formatJours(delaiMoyen) : '—', 'Délai de traitement moyen', 'du dépôt à la clôture'],
+    [ageMoyen != null ? formatJours(ageMoyen) : '—', 'Temps de réactivité', 'ancienneté moyenne des dossiers en cours'],
+    [String(urgents), 'Urgents en cours', null],
+  ];
+
+  el.innerHTML = cases
+    .map(
+      ([v, l, s]) => `
+    <div class="stats-bloc stats-kpi-carte">
+      <div class="stats-kpi-val">${v}</div>
+      <div class="stats-kpi-label">${l}</div>
+      ${s ? `<div class="stats-kpi-sub">${s}</div>` : ''}
+    </div>`
+    )
+    .join('');
+}
+
+// ------------------------------------------------------------
+// Évolution dans le temps — créés vs traités, par jour.
+// Toujours bornée à 90 points maximum pour rester lisible, même
+// avec le filtre « Tout ».
+// ------------------------------------------------------------
+function rendreEvolution(el) {
+  const jours = periodeStats && periodeStats <= 90 ? periodeStats : 90;
+  const dateDebut = new Date();
+  dateDebut.setHours(0, 0, 0, 0);
+  dateDebut.setDate(dateDebut.getDate() - (jours - 1));
+
+  const cles = [];
+  for (let i = 0; i < jours; i++) {
+    const d = new Date(dateDebut);
+    d.setDate(d.getDate() + i);
+    cles.push(d.toISOString().slice(0, 10));
+  }
+
+  const crees = Object.fromEntries(cles.map((c) => [c, 0]));
+  const traites = Object.fromEntries(cles.map((c) => [c, 0]));
+
+  signalements.forEach((s) => {
+    const cleCreation = s.created_at ? s.created_at.slice(0, 10) : null;
+    if (cleCreation && cleCreation in crees) crees[cleCreation]++;
+    if (s.traite_at) {
+      const cleTraite = s.traite_at.slice(0, 10);
+      if (cleTraite in traites) traites[cleTraite]++;
+    }
+  });
+
+  const valeursCrees = cles.map((c) => crees[c]);
+  const valeursTraites = cles.map((c) => traites[c]);
+  const max = Math.max(1, ...valeursCrees, ...valeursTraites);
+
+  const largeur = 640;
+  const hauteur = 180;
+  const marge = 8;
+  const pas = cles.length > 1 ? (largeur - marge * 2) / (cles.length - 1) : 0;
+  const y = (v) => hauteur - marge - (v / max) * (hauteur - marge * 2);
+  const x = (i) => marge + i * pas;
+  const chemin = (valeurs) => valeurs.map((v, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
+
+  el.className = '';
+  el.innerHTML = `
+    <svg class="stats-evolution-svg" viewBox="0 0 ${largeur} ${hauteur}" preserveAspectRatio="none">
+      <line x1="${marge}" y1="${hauteur - marge}" x2="${largeur - marge}" y2="${hauteur - marge}" stroke="var(--border)" stroke-width="1"/>
+      <path d="${chemin(valeursCrees)}" fill="none" stroke="var(--blue)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${chemin(valeursTraites)}" fill="none" stroke="var(--green)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <div class="stats-evolution-legende">
+      <span><i style="background:var(--blue)"></i>Créés</span>
+      <span><i style="background:var(--green)"></i>Traités (résolus/clôturés)</span>
+      <span>Du ${formatDateCourte(cles[0])} au ${formatDateCourte(cles[cles.length - 1])}</span>
+    </div>`;
+}
+
+// ------------------------------------------------------------
+// Répartition par catégorie — couleurs reprises de la taxonomie.
+// ------------------------------------------------------------
+function rendreRepartitionCategories(el, liste) {
+  const compte = new Map();
+  liste.forEach((s) => {
+    const nom = s.categorie_nom || 'Sans catégorie';
+    compte.set(nom, (compte.get(nom) || 0) + 1);
+  });
+  const tri = [...compte.entries()].sort((a, b) => b[1] - a[1]);
+  const max = tri.length ? tri[0][1] : 1;
+  const couleurDe = (nom) => (categoriesAdmin.find((c) => c.nom === nom) || {}).couleur || 'var(--blue)';
+
+  el.className = '';
+  el.innerHTML = tri
+    .map(
+      ([nom, n]) => `
+    <div class="stats-barre-ligne">
+      <span class="stats-cat-puce" style="background:${couleurDe(nom)}"></span>
+      <span class="stats-barre-label" title="${nom}">${nom}</span>
+      <span class="stats-barre-piste"><span class="stats-barre-remplissage" style="width:${((n / max) * 100).toFixed(0)}%;background:${couleurDe(nom)}"></span></span>
+      <span class="stats-barre-valeur">${n}</span>
+    </div>`
+    )
+    .join('');
+}
+
+// ------------------------------------------------------------
+// Réponses apportées — répartition par statut final.
+// ------------------------------------------------------------
+const COULEURS_STATUT = {
+  nouveau: 'var(--blue)',
+  resolu: 'var(--green)',
+  cloture: 'var(--green)',
+  non_recevable: 'var(--ink-dim)',
+};
+
+function rendreRepartitionStatuts(el, liste) {
+  const compte = new Map();
+  liste.forEach((s) => compte.set(s.statut, (compte.get(s.statut) || 0) + 1));
+  const tri = [...compte.entries()].sort((a, b) => b[1] - a[1]);
+  const max = tri.length ? tri[0][1] : 1;
+
+  el.className = '';
+  el.innerHTML = tri
+    .map(
+      ([statut, n]) => `
+    <div class="stats-barre-ligne">
+      <span class="stats-barre-label">${LIBELLES_STATUT[statut] || statut}</span>
+      <span class="stats-barre-piste"><span class="stats-barre-remplissage" style="width:${((n / max) * 100).toFixed(0)}%;background:${COULEURS_STATUT[statut] || 'var(--blue)'}"></span></span>
+      <span class="stats-barre-valeur">${n}</span>
+    </div>`
+    )
+    .join('');
+}
+
+// ------------------------------------------------------------
+// Délais par catégorie — réel (mesuré) vs indicatif (configuré
+// dans les sous-catégories). L'écart aide à repérer les
+// catégories où le délai annoncé n'est pas tenu.
+// ------------------------------------------------------------
+function rendreTableDelais(el, liste) {
+  const parCategorie = new Map();
+  liste.forEach((s) => {
+    const nom = s.categorie_nom || 'Sans catégorie';
+    if (!parCategorie.has(nom)) parCategorie.set(nom, []);
+    parCategorie.get(nom).push(s);
+  });
+
+  const lignes = [...parCategorie.entries()]
+    .map(([nom, items]) => {
+      const clos = items.filter((s) => s.traite_at);
+      const delaisReels = clos.map((s) => (new Date(s.traite_at) - new Date(s.created_at)) / 86400000);
+      const delaiReel = delaisReels.length ? delaisReels.reduce((a, b) => a + b, 0) / delaisReels.length : null;
+
+      const cat = categoriesAdmin.find((c) => c.nom === nom);
+      const sousDelais = cat
+        ? sousCategoriesAdmin.filter((s) => s.category_id === cat.id && s.delai_indicatif_jours != null).map((s) => s.delai_indicatif_jours)
+        : [];
+      const delaiIndicatif = sousDelais.length ? sousDelais.reduce((a, b) => a + b, 0) / sousDelais.length : null;
+
+      return { nom, nb: items.length, delaiReel, delaiIndicatif };
+    })
+    .sort((a, b) => b.nb - a.nb);
+
+  el.className = '';
+  el.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Catégorie</th>
+          <th style="text-align:right">Signalements</th>
+          <th style="text-align:right">Délai réel moyen</th>
+          <th style="text-align:right">Délai indicatif</th>
+          <th style="text-align:right">Écart</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${lignes
+          .map((l) => {
+            let ecart = '—';
+            if (l.delaiReel != null && l.delaiIndicatif != null) {
+              const diff = l.delaiReel - l.delaiIndicatif;
+              const classe = diff > 0 ? 'stats-ecart-depasse' : 'stats-ecart-tenu';
+              const signe = diff > 0 ? '+' : '';
+              ecart = `<span class="${classe}">${signe}${diff.toFixed(1)} j</span>`;
+            }
+            return `
+          <tr>
+            <td>${l.nom}</td>
+            <td class="num">${l.nb}</td>
+            <td class="num">${l.delaiReel != null ? formatJours(l.delaiReel) : '—'}</td>
+            <td class="num">${l.delaiIndicatif != null ? formatJours(l.delaiIndicatif) : '—'}</td>
+            <td class="num">${ecart}</td>
+          </tr>`;
+          })
+          .join('')}
+      </tbody>
+    </table>`;
+}
