@@ -601,21 +601,23 @@ body.ui-idle #boutons-flottants { opacity: 0.16; }
 
 /* Bulle d'information : thème sombre, cohérent avec le reste de
    l'interface (le style par défaut de MapLibre est blanc et
-   illisible ici). */
+   illisible ici). Utilise les variables du thème, pas de valeurs
+   figées, pour rester cohérent quand un thème clair est actif
+   (page de supervision). */
 .maplibregl-popup-content {
-  background: #11172a !important;
-  color: #f3f5f8 !important;
-  border: 1px solid rgba(243,245,248,0.18);
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--border-strong);
   border-radius: 12px !important;
   padding: 12px 14px !important;
   box-shadow: 0 6px 22px rgba(0,0,0,0.5) !important;
   font-family: var(--font-sans);
 }
 .maplibregl-popup-tip {
-  border-top-color: #11172a !important;
-  border-bottom-color: #11172a !important;
-  border-left-color: #11172a !important;
-  border-right-color: #11172a !important;
+  border-top-color: var(--surface) !important;
+  border-bottom-color: var(--surface) !important;
+  border-left-color: var(--surface) !important;
+  border-right-color: var(--surface) !important;
 }
 .maplibregl-popup-close-button {
   color: var(--ink-dim) !important;
@@ -1223,3 +1225,31 @@ button:focus-visible {
 #alerte-geoloc { background: rgba(239, 83, 80, 0.95); }
 #alerte-carte  { background: rgba(245, 166, 35, 0.95); color: #0a0e1a; }
 #alerte-geoloc.visible, #alerte-carte.visible { display: block; }
+
+/* ============================================================
+   THÈME CLAIR — opt-in via [data-theme="clair"] sur <html>.
+   N'affecte QUE les pages qui l'activent explicitement (la
+   supervision) : sans cet attribut, l'identité nuit reste
+   inchangée partout ailleurs, y compris sur l'application
+   citoyen (index.html).
+   ============================================================ */
+html[data-theme="clair"] {
+  --bg: #f3f5f9;
+  --bg-elevated: #ffffff;
+  --surface: #ffffff;
+  --ink: #10141f;
+  --ink-dim: #5c6579;
+  --border: rgba(16, 20, 31, 0.10);
+  --border-strong: rgba(16, 20, 31, 0.16);
+
+  --blue: #0d84c9;
+  --green: #1a9c6e;
+  --gradient: linear-gradient(90deg, var(--blue), var(--green));
+
+  --danger: #d6423d;
+}
+html[data-theme="clair"] body {
+  background-image:
+    radial-gradient(600px 400px at 15% 0%, rgba(13,132,201,0.05), transparent),
+    radial-gradient(600px 400px at 100% 30%, rgba(26,156,110,0.04), transparent);
+}
