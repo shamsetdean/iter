@@ -39,7 +39,7 @@
     </div>
 
     <ul class="exigences" id="exigences">
-      <li id="ex-longueur">Au moins 8 caractères</li>
+      <li id="ex-longueur">Au moins 10 caractères</li>
       <li id="ex-identiques">Les deux saisies sont identiques</li>
     </ul>
 
@@ -51,7 +51,10 @@
   <a href="index.html" class="btn-link" style="display:block;text-align:center;margin-top:14px;">Retour à l'application</a>
 </div>
 
-<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<!-- Version figée et empreinte SRI : identiques à index.html et
+     supervision.html. Le navigateur refuse le fichier s'il a été
+     modifié sur le serveur de diffusion. -->
+<script src="https://unpkg.com/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous"></script>
 <script type="module" src="js/reinitialisation.js"></script>
 <script>
 // ------------------------------------------------------------
