@@ -10,9 +10,10 @@
 //
 // Supabase place l'utilisateur en session temporaire quand il
 // arrive depuis le lien reçu par email (événement
-// PASSWORD_RECOVERY). Sans cette session, la page refuse
-// d'afficher le formulaire : impossible de changer le mot de
-// passe de quelqu'un sans être passé par sa boîte mail.
+// PASSWORD_RECOVERY). Le formulaire ne s'ouvre QUE dans ce cas :
+// une session déjà ouverte (collègue resté connecté sur un poste
+// partagé) ne suffit pas. Impossible de changer le mot de passe
+// de quelqu'un sans être passé par sa boîte mail.
 // ============================================================
 
 import { supabase, getSession } from './supabase-client.js';
@@ -32,7 +33,19 @@ function afficher(texte, type = '') {
   message.style.color = type === 'succes' ? 'var(--ok)' : type === 'info' ? 'var(--ink-dim)' : 'var(--danger)';
 }
 
+// L'adresse est lue ici, avant que le SDK ne la nettoie : ce code
+// s'exécute dans la même tâche que la création du client
+// Supabase, donc avant le traitement asynchrone du lien.
+const adresseInitiale = `${window.location.search}${window.location.hash}`;
+const arriveeParLien =
+  /[#?&]type=recovery(?:&|$)/.test(adresseInitiale) || /[?&]code=/.test(adresseInitiale);
+
+let formulaireOuvert = false;
+
 function activerFormulaire() {
+  if (formulaireOuvert) return;
+  formulaireOuvert = true;
+  afficher('');
   if (sousTitre) sousTitre.textContent = 'Choisissez un nouveau mot de passe pour votre compte.';
   if (formulaire) formulaire.style.display = 'block';
 }
@@ -45,27 +58,28 @@ function lienInvalide() {
   );
 }
 
-// Le jeton arrive dans le fragment d'URL (#access_token=…), que
-// le SDK Supabase consomme au chargement. On écoute donc
-// l'événement plutôt que de lire l'URL nous-mêmes.
-supabase.auth.onAuthStateChange((evenement, session) => {
-  if (evenement === 'PASSWORD_RECOVERY' || (evenement === 'SIGNED_IN' && session)) {
-    activerFormulaire();
-  }
+// Signal principal : l'événement émis par le SDK quand il a
+// validé le jeton du lien. SIGNED_IN n'est volontairement plus
+// accepté : il se produit aussi pour une session ordinaire.
+supabase.auth.onAuthStateChange((evenement) => {
+  if (evenement === 'PASSWORD_RECOVERY') activerFormulaire();
 });
 
-// Cas où la session est déjà établie au moment du chargement
-getSession().then((session) => {
-  if (session) activerFormulaire();
-  else {
-    // On laisse au SDK le temps de traiter le fragment d'URL
-    setTimeout(async () => {
-      const s = await getSession();
-      if (s) activerFormulaire();
-      else lienInvalide();
-    }, 1200);
-  }
-});
+if (!arriveeParLien) {
+  // Page ouverte directement, sans lien de réinitialisation :
+  // refus, même si une session est ouverte dans ce navigateur.
+  lienInvalide();
+} else {
+  // Filet de sécurité si l'événement a été émis avant l'écoute :
+  // on laisse au SDK le temps de traiter le lien, puis on vérifie
+  // qu'une session a bien été établie par ce lien.
+  setTimeout(async () => {
+    if (formulaireOuvert) return;
+    const session = await getSession();
+    if (session) activerFormulaire();
+    else lienInvalide();
+  }, 1200);
+}
 
 // ------------------------------------------------------------
 // Contrôle des exigences en direct
@@ -114,6 +128,16 @@ boutonValider?.addEventListener('click', async () => {
     boutonValider.disabled = false;
     boutonValider.textContent = 'Enregistrer';
     return;
+  }
+
+  // Déconnexion de toutes les sessions du compte, sur tous les
+  // appareils : si quelqu'un utilisait l'ancien mot de passe, il
+  // perd l'accès immédiatement. Un échec ici ne remet pas en
+  // cause le changement de mot de passe, déjà enregistré.
+  try {
+    await supabase.auth.signOut({ scope: 'global' });
+  } catch (e) {
+    console.warn('Déconnexion des autres sessions impossible :', e);
   }
 
   if (formulaire) formulaire.style.display = 'none';
