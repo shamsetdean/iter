@@ -56,6 +56,11 @@ let sessionCourante = null;
 // Statistiques, mais pas forcément à Comptes/Journal.
 let estAdminComplet = false;
 let estAccesDashboard = false;
+// Droits de gestion des signalements (domaine te), lus en base.
+// L'administrateur complet les a tous.
+let peutTraiter = false;
+let peutModifier = false;
+let peutSupprimer = false;
 
 const STATUTS_CLOS = ['resolu', 'cloture', 'non_recevable'];
 
@@ -188,7 +193,7 @@ async function verifierAcces() {
   // protègent, pas cet écran.
   const [resProfil, resDroitTe] = await Promise.all([
     supabase.from('profils').select('role').eq('user_id', session.user.id).maybeSingle(),
-    supabase.from('droits').select('acces_dashboard').eq('user_id', session.user.id).eq('domaine', 'te').maybeSingle(),
+    supabase.from('droits').select('acces_dashboard, traiter, modifier, supprimer').eq('user_id', session.user.id).eq('domaine', 'te').maybeSingle(),
   ]);
 
   if (resProfil.error) {
@@ -200,6 +205,9 @@ async function verifierAcces() {
 
   estAdminComplet = Boolean(resProfil.data && resProfil.data.role === 'administrateur');
   estAccesDashboard = estAdminComplet || Boolean(resDroitTe.data && resDroitTe.data.acces_dashboard);
+  peutTraiter = estAdminComplet || Boolean(resDroitTe.data && resDroitTe.data.traiter);
+  peutModifier = estAdminComplet || Boolean(resDroitTe.data && resDroitTe.data.modifier);
+  peutSupprimer = estAdminComplet || Boolean(resDroitTe.data && resDroitTe.data.supprimer);
 
   if (!estAccesDashboard) {
     sessionCourante = null;
@@ -373,21 +381,21 @@ function rendreSignalements() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
           </button>
           ${
-            estAdminComplet
+            peutModifier
               ? `<select class="sig-statut-select" data-prio-select="${s.id}" title="Priorité">
                   ${Object.entries(LIBELLES_PRIORITE).map(([v, p]) => `<option value="${v}" ${s.priorite === v ? 'selected' : ''}>${p.emoji} ${p.libelle}</option>`).join('')}
                  </select>`
               : ''
           }
           ${
-            estAdminComplet
+            peutTraiter
               ? `<select class="sig-statut-select" data-statut-select="${s.id}">
                   ${Object.entries(LIBELLES_STATUT).map(([v, l]) => `<option value="${v}" ${s.statut === v ? 'selected' : ''}>${l}</option>`).join('')}
                  </select>`
               : ''
           }
           ${
-            estAdminComplet
+            peutSupprimer
               ? `<button class="suppr" data-suppr-sig="${s.id}" title="Supprimer" aria-label="Supprimer">
                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14Z"/></svg>
                  </button>`
@@ -398,17 +406,20 @@ function rendreSignalements() {
     })
     .join('');
 
-  // Changer le statut / la priorité / supprimer depuis ce tableau
-  // de bord restent réservés à l'administrateur complet — un
-  // accès "dashboard" seul est une vue de consultation, pas un
-  // outil de modération sur les signalements d'autrui.
-  if (estAdminComplet) {
+  // Statut, priorité et suppression suivent les droits du compte
+  // (traiter, modifier, supprimer). Un accès "dashboard" seul,
+  // sans ces droits, reste une vue de consultation.
+  if (peutTraiter) {
     el.querySelectorAll('[data-statut-select]').forEach((sel) =>
       sel.addEventListener('change', (e) => majStatut(sel.dataset.statutSelect, e.target.value))
     );
+  }
+  if (peutModifier) {
     el.querySelectorAll('[data-prio-select]').forEach((sel) =>
       sel.addEventListener('change', (e) => majPriorite(sel.dataset.prioSelect, e.target.value))
     );
+  }
+  if (peutSupprimer) {
     el.querySelectorAll('[data-suppr-sig]').forEach((b) =>
       b.addEventListener('click', () => effacerSignalement(b.dataset.supprSig))
     );
