@@ -1,0 +1,73 @@
+# ============================================================
+# ITER — Maintien en vie du projet Supabase
+#
+# Exécute un vrai INSERT dans la table public.heartbeat du
+# projet iter toutes les 72 heures. La base est touchée pour de
+# vrai, horodatée, et la trace reste visible dans le dashboard
+# Supabase (Table Editor > heartbeat).
+#
+# La fréquence de 3 jours laisse une marge confortable : la mise
+# en pause automatique Supabase arrive à 7 jours d'inactivité,
+# on est toujours loin du seuil même si une exécution est sautée.
+#
+# Le secret SUPABASE_SERVICE_ROLE_KEY doit être défini dans
+# Settings > Secrets and variables > Actions du dépôt iter.
+# ============================================================
+
+name: Supabase keep-alive iter
+
+on:
+  schedule:
+    # À 06h12 UTC (07h12 ou 08h12 en France selon l'heure d'été),
+    # tous les 3 jours. L'heure choisie est inhabituelle pour ne
+    # pas tomber sur la minute 0, où les runners GitHub sont très
+    # chargés et les crons souvent décalés de plusieurs minutes.
+    - cron: '12 6 */3 * *'
+  # Permet un déclenchement manuel depuis l'onglet Actions pour
+  # vérifier que tout fonctionne sans attendre le prochain cron.
+  workflow_dispatch:
+
+jobs:
+  battement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Envoi du battement vers Supabase
+        env:
+          SUPABASE_URL: https://gnphnfmdzlxscfnasmpg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "ERREUR : secret SUPABASE_SERVICE_ROLE_KEY absent du dépôt."
+            echo "Ajoutez-le dans Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+          HORODATAGE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          CORPS=$(printf '{"source":"github-actions","note":"Battement automatique du %s"}' "$HORODATAGE")
+
+          REPONSE=$(curl --fail --show-error --silent \
+            --request POST "$SUPABASE_URL/rest/v1/heartbeat" \
+            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Content-Type: application/json" \
+            --header "Prefer: return=representation" \
+            --data "$CORPS")
+
+          echo "Battement envoyé avec succès à $HORODATAGE"
+          echo "Réponse de Supabase :"
+          echo "$REPONSE"
+
+      - name: Lecture du dernier battement, pour vérification
+        env:
+          SUPABASE_URL: https://gnphnfmdzlxscfnasmpg.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+
+          curl --fail --show-error --silent \
+            "$SUPABASE_URL/rest/v1/heartbeat?select=battement_a,source,note&order=battement_a.desc&limit=3" \
+            --header "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            --header "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
